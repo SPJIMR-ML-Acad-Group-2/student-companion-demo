@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Programmes & Batches ──────────────────────────────
+
+model Programme {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique  // PGP, PGPBM — prefix for roll numbers
+  name     String           // PGDM, PGDM (BM)
+  fullName String           // Post Graduate Diploma in Management
+  batches  Batch[]
+}
+
+model Batch {
+  id          Int       @id @default(autoincrement())
+  programmeId Int
+  name        String    // "PGDM 2025-27"
+  startYear   Int       // 2025
+  endYear     Int       // 2027
+  isActive    Boolean   @default(true)
+  programme   Programme @relation(fields: [programmeId], references: [id])
+  terms       Term[]
+  students    User[]
+  divisions   Division[] @relation("BatchDivisions")
+
+  @@unique([programmeId, startYear, endYear])
+}
+
+model Term {
+  id        Int      @id @default(autoincrement())
+  batchId   Int
+  number    Int      // 1, 2, 3...
+  name      String   // "Term 1", "Term 3"
+  startDate String?  // YYYY-MM-DD
+  isActive  Boolean  @default(false)
+  batch     Batch    @relation(fields: [batchId], references: [id])
+  courses   Course[]
+
+  @@unique([batchId, number])
+}
+
+// ─── Specialisations & Divisions ───────────────────────
+
+model Specialisation {
+  id        Int        @id @default(autoincrement())
+  name      String     // "Marketing", "Information Management & Analytics"
+  code      String     @unique  // MKT, IM
+  divisions Division[] @relation("SpecDivisions")
+  students  User[]     @relation("StudentSpecialisation")
+  courses   Course[]   @relation("SpecCourses")
+}
+
+model Division {
+  id               Int             @id @default(autoincrement())
+  name             String          @unique  // "A", "B", "MKT-A", "IM-B" — globally unique
+  type             String          // "core" | "specialisation"
+  batchId          Int?            // for core divisions — linked to batch
+  specialisationId Int?
+  batch            Batch?          @relation("BatchDivisions", fields: [batchId], references: [id])
+  specialisation   Specialisation? @relation("SpecDivisions", fields: [specialisationId], references: [id])
+  timetable        Timetable[]
+  sessions         Session[]
+  coreStudents     User[]          @relation("CoreDivision")
+  specStudents     User[]          @relation("SpecDivision")
+}
+
+// ─── Users ─────────────────────────────────────────────
+
+model User {
+  id               Int             @id @default(autoincrement())
+  name             String
+  email            String          @unique
+  role             String          // student | programme_office
+  rollNumber       String?         @unique  // PGP-25-001, PGPBM-25-003
+  batchId          Int?
+  coreDivisionId   Int?
+  specialisationId Int?
+  specDivisionId   Int?
+  batch            Batch?          @relation(fields: [batchId], references: [id])
+  coreDivision     Division?       @relation("CoreDivision", fields: [coreDivisionId], references: [id])
+  specialisation   Specialisation? @relation("StudentSpecialisation", fields: [specialisationId], references: [id])
+  specDivision     Division?       @relation("SpecDivision", fields: [specDivisionId], references: [id])
+  attendance       Attendance[]
+  createdAt        DateTime        @default(now())
+}
+
+// ─── Courses & Timetable ───────────────────────────────
+
+model Course {
+  id            Int         @id @default(autoincrement())
+  code          String      @unique
+  name          String
+  totalSessions Int
+  credits       Int         @default(3)  // 1, 2, 3, or 4
+  termId        Int?
+  type          String      @default("core")  // core | elective | specialisation
+  specialisationId Int?     // links spec courses to their specialisation
+  term          Term?       @relation(fields: [termId], references: [id])
+  specialisation Specialisation? @relation("SpecCourses", fields: [specialisationId], references: [id])
+  timetable     Timetable[]
+  sessions      Session[]
+}
+
+model Timetable {
+  id         Int      @id @default(autoincrement())
+  divisionId Int
+  courseId    Int
+  dayOfWeek  Int      // 0=Sunday, 1=Monday, ... 6=Saturday
+  slotNumber Int
+  startTime  String   // HH:mm format
+  endTime    String   // HH:mm format
+  division   Division @relation(fields: [divisionId], references: [id])
+  course     Course   @relation(fields: [courseId], references: [id])
+
+  @@unique([divisionId, dayOfWeek, slotNumber])
+}
+
+// ─── Sessions & Attendance ─────────────────────────────
+
+model Session {
+  id         Int          @id @default(autoincrement())
+  courseId    Int
+  divisionId Int
+  date       String       // YYYY-MM-DD
+  slotNumber Int
+  course     Course       @relation(fields: [courseId], references: [id])
+  division   Division     @relation(fields: [divisionId], references: [id])
+  attendance Attendance[]
+  createdAt  DateTime     @default(now())
+
+  @@unique([courseId, divisionId, date, slotNumber])
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  sessionId Int
+  studentId Int
+  status    String   // P | AB | LT | SL
+  swipeTime String?  // HH:mm:ss
+  session   Session  @relation(fields: [sessionId], references: [id])
+  student   User     @relation(fields: [studentId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, studentId])
+}
