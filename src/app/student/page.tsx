@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-interface PenaltyInfo { level: string; label: string; description: string; thresholds: { L1: number; L2: number; L3: number }; absencesUntilL1: number; }
-interface LogEntry { sessionId: number; date: string; slot: number; status: string; swipeTime: string | null; }
+interface PenaltyInfo { level: string; label: string; description: string; thresholds: { L1: number; L2: number; L3: number }; effectiveAbsences: number; }
+interface LogEntry { sessionId: number; sessionNumber: number | null; date: string; slot: number; status: string; swipeTime: string | null; }
 interface CourseStats {
   courseId: number; courseCode: string; courseName: string; courseType: string;
   credits: number; totalPlanned: number; totalConducted: number;
-  present: number; absent: number; late: number; percentage: number;
+  present: number; absent: number; late: number; pLeave: number; percentage: number;
   penalty: PenaltyInfo; specialisation: string | null; log: LogEntry[];
 }
 interface TermInfo { id: number; number: number; name: string; isActive: boolean; }
@@ -73,7 +73,10 @@ export default function StudentDashboard() {
     <div className="dashboard-layout">
       <aside className="sidebar">
         <div className="sidebar-brand"><div className="sidebar-brand-icon">📚</div><h2>Companion</h2></div>
-        <nav className="sidebar-nav"><div className="sidebar-link active"><span className="sidebar-link-icon">📊</span> My Attendance</div></nav>
+        <nav className="sidebar-nav">
+          <div className="sidebar-link active"><span className="sidebar-link-icon">📊</span> Attendance</div>
+          <a className="sidebar-link" href="/student/calendar"><span className="sidebar-link-icon">📅</span> Calendar</a>
+        </nav>
         <div className="sidebar-user"><div className="sidebar-avatar">{user.name[0]}</div>
           <div className="sidebar-user-info"><div className="sidebar-user-name">{user.name}</div><div className="sidebar-user-role">Student</div></div>
           <button className="quick-btn" onClick={handleLogout} style={{ padding: "6px 10px", fontSize: "11px" }}>↩</button></div>
@@ -130,7 +133,7 @@ export default function StudentDashboard() {
 
         {/* Penalty Table */}
         <div className="division-card" style={{ marginTop: 32 }}>
-          <h3 style={{ fontSize: 14, marginBottom: 12, color: "var(--text-secondary)" }}>📜 Absenteeism Penalty Table</h3>
+          <h3 style={{ fontSize: 14, marginBottom: 12, color: "var(--text-secondary)" }}>📜 Absenteeism Penalty Table (2 Lates = 1 Absence)</h3>
           <table className="data-table">
             <thead><tr><th>Credits</th><th>Sessions</th><th>L1 (1-level ↓)</th><th>L2 (2-level ↓)</th><th>L3 (F grade)</th></tr></thead>
             <tbody>
@@ -140,7 +143,7 @@ export default function StudentDashboard() {
               <tr><td>4</td><td>35</td><td>5</td><td>7</td><td>9</td></tr>
             </tbody>
           </table>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>L1 = 1-level downgrade (A+→A) · L2 = 1-letter downgrade (A→B) · L3 = F grade</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>L1 = 1-level downgrade (A+→A) · L2 = 1-letter downgrade (A→B) · L3 = F grade. 2 Lates = 1 Absence for penalty calculation.</div>
         </div>
       </main>
     </div>
@@ -171,15 +174,16 @@ function CourseCard({ course, delay, expanded, onToggle }: { course: CourseStats
         <div className="attendance-detail"><div className="attendance-detail-value detail-present">{course.present}</div><div className="attendance-detail-label">Present</div></div>
         <div className="attendance-detail"><div className="attendance-detail-value detail-absent">{course.absent}</div><div className="attendance-detail-label">Absent</div></div>
         <div className="attendance-detail"><div className="attendance-detail-value detail-late">{course.late}</div><div className="attendance-detail-label">Late</div></div>
+        <div className="attendance-detail"><div className="attendance-detail-value" style={{ color: "var(--accent-secondary)" }}>{course.pLeave}</div><div className="attendance-detail-label">P# Leave</div></div>
       </div>
       <div style={{ padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 8, fontSize: 12, color: penaltyColor, marginTop: 8 }}>
-        {penalty.level === "none" ? `${penalty.absencesUntilL1} more absence${penalty.absencesUntilL1 !== 1 ? "s" : ""} before L1` : penalty.description}
+        {penalty.level === "none" ? `${Math.max(0, penalty.thresholds.L1 - penalty.effectiveAbsences)} more eff. absences before L1 penalty` : penalty.description}
       </div>
       <div style={{ display: "flex", gap: 4, marginTop: 8, fontSize: 11, color: "var(--text-muted)" }}>
-        <span>Absences: {course.absent}</span><span style={{ flex: 1 }} />
-        <span style={{ color: course.absent >= penalty.thresholds.L1 ? "var(--warning)" : undefined }}>L1: {penalty.thresholds.L1}</span>
-        <span style={{ color: course.absent >= penalty.thresholds.L2 ? "var(--danger)" : undefined }}>L2: {penalty.thresholds.L2}</span>
-        <span style={{ color: course.absent >= penalty.thresholds.L3 ? "var(--danger)" : undefined }}>L3: {penalty.thresholds.L3}</span>
+        <span>Eff. Absences: {penalty.effectiveAbsences}</span><span style={{ flex: 1 }} />
+        <span style={{ color: penalty.effectiveAbsences >= penalty.thresholds.L1 ? "var(--warning)" : undefined }}>L1: {penalty.thresholds.L1}</span>
+        <span style={{ color: penalty.effectiveAbsences >= penalty.thresholds.L2 ? "var(--danger)" : undefined }}>L2: {penalty.thresholds.L2}</span>
+        <span style={{ color: penalty.effectiveAbsences >= penalty.thresholds.L3 ? "var(--danger)" : undefined }}>L3: {penalty.thresholds.L3}</span>
       </div>
 
       {/* Attendance Log Toggle */}

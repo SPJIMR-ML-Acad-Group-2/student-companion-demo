@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // Roll number pattern: CODE-YY-NNN (e.g., PGP-25-001, PGPBM-25-003)
 const ROLL_NUMBER_REGEX = /^[A-Z]+-\d{2}-\d{3}$/;
 

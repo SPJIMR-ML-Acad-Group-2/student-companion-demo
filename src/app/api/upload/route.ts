@@ -80,10 +80,8 @@ export async function POST(req: NextRequest) {
     // Process each date
     for (const date of uniqueDates) {
       const dateSwipes = swipes.filter(s => s.date === date);
-      const dayOfWeek = dateSwipes[0].dayOfWeek;
-
       // Get timetable slots for this day
-      const daySlots = timetableEntries.filter(t => t.dayOfWeek === dayOfWeek);
+      const daySlots = timetableEntries.filter(t => t.date === date);
 
       for (const slot of daySlots) {
         // Determine which students belong to this slot's division
@@ -152,57 +150,63 @@ export async function POST(req: NextRequest) {
 
           // Check if swipe falls within slot window (5 min early to end)
           if (swipeMinutes >= slotStartMinutes - 5 && swipeMinutes <= slotEndMinutes) {
-            const status = swipeMinutes <= lateThreshold ? "P" : "LT";
+            // Only mark Present automatically. If they are late (after lateThreshold), do not auto-mark.
+            if (swipeMinutes <= lateThreshold) {
+              const status = "P";
 
-            try {
-              await prisma.attendance.upsert({
-                where: {
-                  sessionId_studentId: {
+              try {
+                await prisma.attendance.upsert({
+                  where: {
+                    sessionId_studentId: {
+                      sessionId: sessionRecord.id,
+                      studentId: student.id,
+                    },
+                  },
+                  update: { status, swipeTime: swipe.timeStr },
+                  create: {
                     sessionId: sessionRecord.id,
                     studentId: student.id,
+                    status,
+                    swipeTime: swipe.timeStr,
                   },
-                },
-                update: { status, swipeTime: swipe.timeStr },
-                create: {
-                  sessionId: sessionRecord.id,
-                  studentId: student.id,
-                  status,
-                  swipeTime: swipe.timeStr,
-                },
-              });
+                });
 
-              markedStudents.add(student.id);
-              if (status === "LT") results.lateMarked++;
-              else results.attendanceMarked++;
-            } catch (err) {
-              results.errors.push(`Error marking ${swipe.rollNumber}: ${err}`);
+                markedStudents.add(student.id);
+                results.attendanceMarked++;
+              } catch (err) {
+                results.errors.push(`Error marking ${swipe.rollNumber}: ${err}`);
+              }
             }
           }
         }
 
-        // Mark absent students (in this division but not swiped)
-        for (const student of divStudents) {
-          if (markedStudents.has(student.id)) continue;
+        // Edge case: If no one in the class punched the biometric for this slot, do NOT mark anyone absent.
+        // We leave the attendance records empty so it gets flagged on the UI.
+        if (markedStudents.size > 0) {
+          // Mark absent students (in this division but not swiped)
+          for (const student of divStudents) {
+            if (markedStudents.has(student.id)) continue;
 
-          const existing = await prisma.attendance.findUnique({
-            where: {
-              sessionId_studentId: {
-                sessionId: sessionRecord.id,
-                studentId: student.id,
-              },
-            },
-          });
-
-          if (!existing) {
-            await prisma.attendance.create({
-              data: {
-                sessionId: sessionRecord.id,
-                studentId: student.id,
-                status: "AB",
-                swipeTime: null,
+            const existing = await prisma.attendance.findUnique({
+              where: {
+                sessionId_studentId: {
+                  sessionId: sessionRecord.id,
+                  studentId: student.id,
+                },
               },
             });
-            results.absentMarked++;
+
+            if (!existing) {
+              await prisma.attendance.create({
+                data: {
+                  sessionId: sessionRecord.id,
+                  studentId: student.id,
+                  status: "AB",
+                  swipeTime: null,
+                },
+              });
+              results.absentMarked++;
+            }
           }
         }
       }

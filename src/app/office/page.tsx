@@ -104,6 +104,7 @@ export default function OfficeDashboard() {
         <nav className="sidebar-nav">
           <div className="sidebar-link active"><span className="sidebar-link-icon">📊</span> Dashboard</div>
           <a className="sidebar-link" href="/office/manage"><span className="sidebar-link-icon">⚙️</span> Manage</a>
+          <a className="sidebar-link" href="/office/calendar"><span className="sidebar-link-icon">📅</span> Calendar</a>
         </nav>
         <div className="sidebar-user">
           <div className="sidebar-avatar">{user.name[0]}</div>

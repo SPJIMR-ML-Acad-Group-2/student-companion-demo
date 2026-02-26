@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const divisions = await prisma.division.findMany({
     include: {
@@ -27,10 +29,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Check uniqueness explicitly
-  const existing = await prisma.division.findUnique({ where: { name: finalName } });
+  // Check uniqueness within batch
+  const existing = await prisma.division.findFirst({ where: { name: finalName, batchId: batchId || null } });
   if (existing) {
-    return NextResponse.json({ error: `Division "${finalName}" already exists` }, { status: 409 });
+    return NextResponse.json({ error: `Division "${finalName}" already exists for this batch` }, { status: 409 });
   }
 
   try {
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(division, { status: 201 });
   } catch (err: unknown) {
     const error = err as { code?: string };
-    if (error.code === "P2002") return NextResponse.json({ error: `Division "${finalName}" already exists` }, { status: 409 });
+    if (error.code === "P2002") return NextResponse.json({ error: `Division "${finalName}" already exists for this batch` }, { status: 409 });
     throw err;
   }
 }

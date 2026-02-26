@@ -6,7 +6,7 @@
  * L2 (2-level downgrade):  4, 6, 6, 7
  * L3 (F grade):            5, 8, 8, 9
  *
- * Grades: A+, A, B+, B, C+, C, D, F
+ * Late rule: 2 Lates = 1 Absence (for penalty calculation)
  */
 
 export const CREDIT_SESSIONS: Record<number, number> = {
@@ -29,28 +29,37 @@ export interface PenaltyInfo {
   level: "none" | "L1" | "L2" | "L3";
   label: string;
   description: string;
+  effectiveAbsences: number;
   absences: number;
+  lates: number;
   thresholds: { L1: number; L2: number; L3: number };
 }
 
-export function getPenaltyInfo(credits: number, absences: number): PenaltyInfo {
-  const thresholds = PENALTY_THRESHOLDS[credits] || PENALTY_THRESHOLDS[3];
+/**
+ * 2 Lates = 1 Absence for penalty purposes.
+ */
+export function getEffectiveAbsences(absences: number, lates: number): number {
+  return absences + Math.floor(lates / 2);
+}
 
-  if (absences >= thresholds.L3) {
-    return { level: "L3", label: "F Grade", description: `${absences} absences → automatic F grade`, absences, thresholds };
+export function getPenaltyInfo(credits: number, absences: number, lates: number = 0): PenaltyInfo {
+  const thresholds = PENALTY_THRESHOLDS[credits] || PENALTY_THRESHOLDS[3];
+  const effective = getEffectiveAbsences(absences, lates);
+
+  if (effective >= thresholds.L3) {
+    return { level: "L3", label: "F Grade", description: `${effective} eff. absences (${absences}AB + ${lates}LT) → F grade`, effectiveAbsences: effective, absences, lates, thresholds };
   }
-  if (absences >= thresholds.L2) {
-    return { level: "L2", label: "2-Level Downgrade", description: `${absences} absences → one letter downgrade (e.g., A→B)`, absences, thresholds };
+  if (effective >= thresholds.L2) {
+    return { level: "L2", label: "2-Level Downgrade", description: `${effective} eff. absences → 2-level downgrade`, effectiveAbsences: effective, absences, lates, thresholds };
   }
-  if (absences >= thresholds.L1) {
-    return { level: "L1", label: "1-Level Downgrade", description: `${absences} absences → one level downgrade (e.g., A+→A)`, absences, thresholds };
+  if (effective >= thresholds.L1) {
+    return { level: "L1", label: "1-Level Downgrade", description: `${effective} eff. absences → 1-level downgrade`, effectiveAbsences: effective, absences, lates, thresholds };
   }
-  return { level: "none", label: "No Penalty", description: `${absences} absences — within allowed limit`, absences, thresholds };
+  return { level: "none", label: "No Penalty", description: `${effective} eff. absences — within limit`, effectiveAbsences: effective, absences, lates, thresholds };
 }
 
 /**
  * Apply penalty to a grade string.
- * Returns the downgraded grade.
  */
 export function applyPenalty(grade: string, penaltyLevel: "none" | "L1" | "L2" | "L3"): string {
   if (penaltyLevel === "none") return grade;

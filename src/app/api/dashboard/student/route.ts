@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getPenaltyInfo, PENALTY_THRESHOLDS } from "@/lib/penalties";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   try {
     const cookieStore = await cookies();
@@ -62,10 +64,11 @@ export async function GET(req: Request) {
         const present = attendance.filter(a => a.status === "P").length;
         const absent = attendance.filter(a => a.status === "AB").length;
         const late = attendance.filter(a => a.status === "LT").length;
+        const pLeave = attendance.filter(a => a.status === "P#").length;
         const totalConducted = sessions.length;
         const percentage = totalConducted > 0 ? Math.round(((present + late) / totalConducted) * 100) : 100;
 
-        const penalty = getPenaltyInfo(course.credits, absent);
+        const penalty = getPenaltyInfo(course.credits, absent, late);
         const thresholds = PENALTY_THRESHOLDS[course.credits] || PENALTY_THRESHOLDS[3];
 
         // Attendance log per session
@@ -73,6 +76,7 @@ export async function GET(req: Request) {
           const record = attendanceMap.get(s.id);
           return {
             sessionId: s.id,
+            sessionNumber: s.sessionNumber,
             date: s.date,
             slot: s.slotNumber,
             status: record?.status || "—",
@@ -84,11 +88,11 @@ export async function GET(req: Request) {
           courseId: course.id, courseCode: course.code, courseName: course.name,
           courseType: course.type, credits: course.credits,
           totalPlanned: course.totalSessions, totalConducted,
-          present, absent, late, percentage,
+          present, absent, late, pLeave, percentage,
           penalty: {
             level: penalty.level, label: penalty.label, description: penalty.description,
-            thresholds: { L1: thresholds.L1, L2: thresholds.L2, L3: thresholds.L3 },
-            absencesUntilL1: Math.max(0, thresholds.L1 - absent),
+            thresholds: penalty.thresholds,
+            effectiveAbsences: penalty.effectiveAbsences,
           },
           specialisation: course.specialisation?.name || null,
           log,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const batches = await prisma.batch.findMany({
     include: { programme: true, terms: true, _count: { select: { students: true } } },

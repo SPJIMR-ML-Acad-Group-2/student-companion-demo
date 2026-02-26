@@ -1,34 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { FIXED_SLOTS } from "@/lib/slots";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const divisionId = req.nextUrl.searchParams.get("divisionId");
+  const weekOf = req.nextUrl.searchParams.get("weekOf"); // YYYY-MM-DD
+
+  let whereClause: any = {};
+  if (divisionId) whereClause.divisionId = parseInt(divisionId);
+
+  if (weekOf) {
+    const refDate = new Date(weekOf);
+    const dayOfWeek = refDate.getDay(); // 0=Sun
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(refDate);
+    monday.setDate(refDate.getDate() + mondayOffset);
+    const saturday = new Date(monday);
+    saturday.setDate(monday.getDate() + 5);
+
+    const weekDates: string[] = [];
+    for (let d = new Date(monday); d <= saturday; d.setDate(d.getDate() + 1)) {
+      weekDates.push(d.toISOString().split("T")[0]);
+    }
+    whereClause.date = { in: weekDates };
+  }
+
   const timetable = await prisma.timetable.findMany({
-    where: divisionId ? { divisionId: parseInt(divisionId) } : {},
+    where: whereClause,
     include: {
       division: { include: { batch: { include: { programme: true } }, specialisation: true } },
       course: true,
+      faculty: true,
     },
-    orderBy: [{ divisionId: "asc" }, { dayOfWeek: "asc" }, { slotNumber: "asc" }],
+    orderBy: [{ divisionId: "asc" }, { date: "asc" }, { slotNumber: "asc" }],
   });
   return NextResponse.json(timetable);
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { divisionId, courseId, dayOfWeek, slotNumber, startTime, endTime } = body;
-  if (!divisionId || !courseId || dayOfWeek == null || !slotNumber) {
-    return NextResponse.json({ error: "divisionId, courseId, dayOfWeek, slotNumber required" }, { status: 400 });
+  const { divisionId, courseId, facultyId, date, slotNumber } = body;
+  if (!divisionId || !courseId || !date || !slotNumber) {
+    return NextResponse.json({ error: "divisionId, courseId, date, slotNumber required" }, { status: 400 });
   }
+
+  // Validate slot number is 1-8
+  const slotDef = FIXED_SLOTS.find(s => s.slot === slotNumber);
+  if (!slotDef) return NextResponse.json({ error: `Invalid slot number ${slotNumber}. Must be 1-8.` }, { status: 400 });
+
   try {
     const entry = await prisma.timetable.create({
-      data: { divisionId, courseId, dayOfWeek, slotNumber, startTime: startTime || "09:00", endTime: endTime || "10:30" },
-      include: { division: true, course: true },
+      data: {
+        divisionId: parseInt(divisionId), courseId: parseInt(courseId),
+        date, slotNumber: parseInt(slotNumber),
+        startTime: slotDef.startTime, endTime: slotDef.endTime,
+        facultyId: facultyId ? parseInt(facultyId) : null,
+      },
+      include: { division: true, course: true, faculty: true },
     });
     return NextResponse.json(entry, { status: 201 });
   } catch (err: unknown) {
     const error = err as { code?: string };
-    if (error.code === "P2002") return NextResponse.json({ error: "Slot already exists for this division/day/slot" }, { status: 409 });
+    if (error.code === "P2002") return NextResponse.json({ error: "Slot already occupied for this division on this date/slot" }, { status: 409 });
     throw err;
   }
 }

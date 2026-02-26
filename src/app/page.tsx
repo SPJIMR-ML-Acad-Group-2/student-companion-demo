@@ -50,10 +50,11 @@ export default function LoginPage() {
         <div className="quick-login">
           <div className="quick-login-label">Quick Demo Login</div>
           <div className="quick-login-btns">
-            <button className="quick-btn" onClick={() => handleLogin("admin@spjimr.org")}>🏫 Programme Office</button>
-            <button className="quick-btn" onClick={() => handleLogin("PGP-25-001")}>🎓 Aarav (PGDM A, MKT)</button>
-            <button className="quick-btn" onClick={() => handleLogin("PGP-25-003")}>🎓 Rohan (PGDM A, IM)</button>
-            <button className="quick-btn" onClick={() => handleLogin("PGPBM-25-001")}>🎓 Aditya (BM A, MKT)</button>
+            <button className="quick-btn" onClick={() => handleLogin("office@spjimr.org")}>🏫 Programme Office</button>
+            <button className="quick-btn" onClick={() => handleLogin("PGP-25-001")}>🎓 Student (PGDM A, Fin)</button>
+            <button className="quick-btn" onClick={() => handleLogin("PGP-25-031")}>🎓 Student (PGDM A, Mkt)</button>
+            <button className="quick-btn" onClick={() => handleLogin("PGP-25-090")}>🎓 Student (PGDM B, IM)</button>
+            <button className="quick-btn" onClick={() => handleLogin("PGPBM-25-001")}>🎓 Student (BM D, Fin)</button>
           </div>
         </div>
       </div>

@@ -65,6 +65,13 @@ CREATE TABLE "User" (
 );
 
 -- CreateTable
+CREATE TABLE "Faculty" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL
+);
+
+-- CreateTable
 CREATE TABLE "Course" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "code" TEXT NOT NULL,
@@ -83,12 +90,14 @@ CREATE TABLE "Timetable" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "divisionId" INTEGER NOT NULL,
     "courseId" INTEGER NOT NULL,
-    "dayOfWeek" INTEGER NOT NULL,
+    "facultyId" INTEGER,
+    "date" TEXT NOT NULL,
     "slotNumber" INTEGER NOT NULL,
     "startTime" TEXT NOT NULL,
     "endTime" TEXT NOT NULL,
     CONSTRAINT "Timetable_divisionId_fkey" FOREIGN KEY ("divisionId") REFERENCES "Division" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Timetable_courseId_fkey" FOREIGN KEY ("courseId") REFERENCES "Course" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT "Timetable_courseId_fkey" FOREIGN KEY ("courseId") REFERENCES "Course" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Timetable_facultyId_fkey" FOREIGN KEY ("facultyId") REFERENCES "Faculty" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateTable
@@ -98,6 +107,7 @@ CREATE TABLE "Session" (
     "divisionId" INTEGER NOT NULL,
     "date" TEXT NOT NULL,
     "slotNumber" INTEGER NOT NULL,
+    "sessionNumber" INTEGER,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Session_courseId_fkey" FOREIGN KEY ("courseId") REFERENCES "Course" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "Session_divisionId_fkey" FOREIGN KEY ("divisionId") REFERENCES "Division" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
@@ -137,10 +147,13 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX "User_rollNumber_key" ON "User"("rollNumber");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Faculty_email_key" ON "Faculty"("email");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Course_code_key" ON "Course"("code");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Timetable_divisionId_dayOfWeek_slotNumber_key" ON "Timetable"("divisionId", "dayOfWeek", "slotNumber");
+CREATE UNIQUE INDEX "Timetable_divisionId_date_slotNumber_key" ON "Timetable"("divisionId", "date", "slotNumber");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Session_courseId_divisionId_date_slotNumber_key" ON "Session"("courseId", "divisionId", "date", "slotNumber");
