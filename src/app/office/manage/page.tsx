@@ -376,7 +376,7 @@ function SpecialisationsTab() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4" style={{ color: C.text }}>⭐ Specialisations</h2>
+      <h2 className="text-lg font-semibold mb-4" style={{ color: C.text }}>Specialisations</h2>
       <div style={card}>
         <div className="flex gap-2">
           <input className={inputCls} style={{ flex: 1 }}   placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
@@ -384,16 +384,35 @@ function SpecialisationsTab() {
           <button style={qBtn} onClick={addSpec}>Add</button>
         </div>
       </div>
-      {specs.map(s => (
-        <div key={s.id} style={card}>
-          <div className="text-lg font-semibold mb-2" style={{ color: C.text }}>{s.name} <span className="text-sm" style={{ color: C.accentS }}>({s.code})</span></div>
-          {s.divisions?.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {s.divisions.map(d => <span key={d.id} className="badge-warning" title={d.batch?.programme?.name}>{d.name} <span className="opacity-60 text-[10px]">({d.batch?.name || "?"})</span></span>)}
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {specs.map(s => (
+          <div key={s.id} className="rounded-2xl border p-5 flex flex-col transition-all hover:-translate-y-1 hover:shadow-lg" style={{ background: C.card, borderColor: C.border }}>
+            <div className="text-xl font-bold mb-1" style={{ color: C.text }}>{s.name}</div>
+            <div className="text-sm font-semibold mb-5" style={{ color: C.accentS }}>Code: {s.code}</div>
+            
+            <div className="flex-1">
+              <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Associated Divisions</div>
+              {s.divisions?.length && s.divisions.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {s.divisions.map(d => (
+                    <span key={d.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border shadow-sm" style={{ background: "var(--color-bg-secondary)", borderColor: C.border, color: C.text }}>
+                      {d.name.replace(/^[^-]+-/, '')} <span className="opacity-50 text-[10px] ml-1">Mixed</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm italic" style={{ color: C.muted }}>No divisions yet</div>
+              )}
             </div>
-          )}
-        </div>
-      ))}
+            
+            <div className="mt-5 pt-4 border-t flex justify-between items-center" style={{ borderColor: C.border }}>
+               <span className="text-xs font-medium uppercase tracking-wider" style={{ color: C.sub }}>Total Capacity</span>
+               <span className="text-base font-bold" style={{ color: C.text }}>{s.divisions?.length || 0} Divs</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -403,23 +422,56 @@ function CoursesTab() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [terms, setTerms]     = useState<Term[]>([]);
   const [specs, setSpecs]     = useState<Specialisation[]>([]);
-  const empty = { code: "", name: "", credits: "3", termId: "", type: "core", specialisationId: "" };
+  const [faculty, setFaculty] = useState<Faculty[]>([]);
+  const empty = { code: "", name: "", credits: "3", termIds: [] as string[], type: "core", specialisationId: "", facultyIds: [] as string[] };
   const [form, setForm]       = useState(empty);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError]     = useState("");
   const [search, setSearch]   = useState("");
   const [page, setPage]       = useState(1);
   const PER = 20;
+
   const fetchAll = useCallback(async () => {
-    const [cR, tR, sR] = await Promise.all([fetch("/api/admin/courses"), fetch("/api/admin/terms"), fetch("/api/admin/specialisations")]);
-    setCourses(await cR.json()); setTerms(await tR.json()); setSpecs(await sR.json());
+    const [cR, tR, sR, fR] = await Promise.all([
+      fetch("/api/admin/courses"), fetch("/api/admin/terms"), 
+      fetch("/api/admin/specialisations"), fetch("/api/admin/faculty")
+    ]);
+    setCourses(await cR.json()); setTerms(await tR.json()); setSpecs(await sR.json()); setFaculty(await fR.json());
   }, []);
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const sesMap: Record<string,number> = { "1": 9, "2": 18, "3": 26, "4": 35 };
+
+  const handleFacultyToggle = (fId: number) => {
+    const idStr = fId.toString();
+    setForm(prev => ({
+      ...prev,
+      facultyIds: prev.facultyIds.includes(idStr) 
+        ? prev.facultyIds.filter(id => id !== idStr) 
+        : [...prev.facultyIds, idStr]
+    }));
+  };
+
+  const handleTermToggle = (tId: number) => {
+    const idStr = tId.toString();
+    setForm(prev => ({
+      ...prev,
+      termIds: prev.termIds.includes(idStr) 
+        ? prev.termIds.filter(id => id !== idStr) 
+        : [...prev.termIds, idStr]
+    }));
+  };
+
   const save = async () => {
     setError("");
-    const payload = { code: form.code, name: form.name, credits: parseInt(form.credits), totalSessions: sesMap[form.credits] || 26, termId: form.termId ? parseInt(form.termId) : null, type: form.type, specialisationId: form.type === "specialisation" && form.specialisationId ? parseInt(form.specialisationId) : null };
+    const payload = { 
+      code: form.code, name: form.name, credits: parseInt(form.credits), 
+      totalSessions: sesMap[form.credits] || 26, 
+      termIds: form.termIds, 
+      type: form.type, 
+      specialisationId: form.type === "specialisation" && form.specialisationId ? parseInt(form.specialisationId) : null,
+      facultyIds: form.facultyIds
+    };
     const res = editingId
       ? await fetch("/api/admin/courses", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingId, ...payload }) })
       : await fetch("/api/admin/courses", { method: "POST",  headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -438,46 +490,182 @@ function CoursesTab() {
         <input type="text" className={inputCls} placeholder="Search courses..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ padding: "6px 12px", width: 250 }} />
       </div>
 
-      <div style={card}>
-        <Label text={editingId ? "✏️ Edit Course" : "Add Course"} />
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mb-6 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none" />
+        
+        <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-6">
+          {editingId ? "✏️ Edit Course" : "✨ Add New Course"}
+        </h3>
+        
         <Err msg={error} />
-        <div className="flex gap-2 flex-wrap items-end">
-          <input className={inputCls} style={{ width: 100 }} placeholder="Code"  value={form.code}   onChange={e => setForm({ ...form, code: e.target.value })} />
-          <input className={inputCls} style={{ flex: 1 }}   placeholder="Name"  value={form.name}   onChange={e => setForm({ ...form, name: e.target.value })} />
-          <select className={inputCls} style={{ width: 80 }} value={form.credits} onChange={e => setForm({ ...form, credits: e.target.value })}>
-            {["1","2","3","4"].map(c => <option key={c} value={c}>{c}cr</option>)}
-          </select>
-          <span className="text-xs self-center" style={{ color: C.muted }}>({sesMap[form.credits]}s)</span>
-          <select className={inputCls} style={{ width: 110 }} value={form.type} onChange={e => setForm({ ...form, type: e.target.value, specialisationId: "" })}>
-            <option value="core">Core</option><option value="specialisation">Spec</option><option value="elective">Elective</option>
-          </select>
-          {form.type === "specialisation" && (
-            <select className={inputCls} style={{ width: 180 }} value={form.specialisationId} onChange={e => setForm({ ...form, specialisationId: e.target.value })}>
-              <option value="">Spec...</option>{specs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5 mb-6 relative z-10">
+          
+          <div className="lg:col-span-3 space-y-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Course Code</label>
+            <input className="w-full bg-black/40 border border-white/10 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-2.5 text-gray-100 placeholder-gray-600 outline-none transition-all duration-300" placeholder="FIN101" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
+          </div>
+
+          <div className="lg:col-span-5 space-y-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Course Name</label>
+            <input className="w-full bg-black/40 border border-white/10 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-2.5 text-gray-100 placeholder-gray-600 outline-none transition-all duration-300" placeholder="Financial Accounting" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          </div>
+
+          <div className="lg:col-span-2 space-y-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Credits</label>
+            <div className="flex gap-2 items-center">
+              <select className="flex-1 bg-black/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-3 py-2.5 text-gray-100 outline-none transition-all cursor-pointer appearance-none" value={form.credits} onChange={e => setForm({ ...form, credits: e.target.value })}>
+                 {["1","2","3","4"].map(c => <option key={c} value={c} className="bg-gray-900">{c} Credits</option>)}
+              </select>
+            </div>
+            <div className="text-[10px] text-gray-500 font-medium px-1">({sesMap[form.credits]} mandatory sessions)</div>
+          </div>
+
+          <div className="lg:col-span-2 space-y-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Type</label>
+            <select className="w-full bg-black/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-4 py-2.5 text-gray-100 outline-none transition-all cursor-pointer appearance-none" value={form.type} onChange={e => setForm({ ...form, type: e.target.value, specialisationId: "" })}>
+               <option className="bg-gray-900" value="core">Core</option><option className="bg-gray-900" value="specialisation">Specialisation</option><option className="bg-gray-900" value="elective">Elective</option>
             </select>
+          </div>
+
+          {form.type === "specialisation" && (
+            <div className="lg:col-span-12 space-y-1.5 animate-fadeIn">
+              <label className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Select Specialisation</label>
+              <select className="w-full lg:w-1/3 bg-black/40 border border-indigo-500/30 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-indigo-100 outline-none transition-all cursor-pointer appearance-none" value={form.specialisationId} onChange={e => setForm({ ...form, specialisationId: e.target.value })}>
+                 <option className="bg-gray-900" value="">Choose a Specialisation...</option>{specs.map(s => <option className="bg-gray-900" key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+              </select>
+            </div>
           )}
-          <select className={inputCls} style={{ flex: 1 }} value={form.termId} onChange={e => setForm({ ...form, termId: e.target.value })}>
-            <option value="">No Term</option>{terms.map(t => <option key={t.id} value={t.id}>{t.programme?.name} — T{t.number}</option>)}
-          </select>
-          <button style={qBtn} onClick={save}>{editingId ? "Save" : "Add"}</button>
-          {editingId && <button style={qBtn} onClick={() => { setEditingId(null); setForm(empty); }}>✕</button>}
+
+          <div className="lg:col-span-6 space-y-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex justify-between">
+              <span>Mapped Terms</span>
+              <span className="text-indigo-400 font-bold">{form.termIds.length} Selected</span>
+            </label>
+            <div className="flex flex-col gap-1.5 h-48 overflow-y-auto px-2 py-3 rounded-xl border border-white/5 bg-black/20 styled-scrollbar">
+              {terms.length === 0 ? <p className="text-xs text-center p-4 text-gray-500 italic">No terms available. Create one in Programmes.</p> : null}
+              {terms.map(t => (
+                <label key={t.id} className={`flex items-center gap-3 text-sm p-2 rounded-lg cursor-pointer transition-all duration-200 ${form.termIds.includes(t.id.toString()) ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-100' : 'hover:bg-white/5 border border-transparent text-gray-400 hover:text-gray-200'}`}>
+                  <input type="checkbox" className="accent-indigo-500 w-4 h-4 rounded focus:ring-indigo-500 focus:ring-offset-gray-900 cursor-pointer" checked={form.termIds.includes(t.id.toString())} onChange={() => handleTermToggle(t.id)} />
+                  <span className="truncate flex-1 font-medium">{t.programme?.code} <span className="opacity-50 mx-1">—</span> Term {t.number}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="lg:col-span-6 space-y-1.5">
+            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex justify-between">
+              <span>Teaching Faculty</span>
+              <span className="text-emerald-400 font-bold">{form.facultyIds.length} Assigned</span>
+            </label>
+            <div className="flex flex-col gap-1.5 h-48 overflow-y-auto px-2 py-3 rounded-xl border border-white/5 bg-black/20 styled-scrollbar">
+              {faculty.length === 0 ? <p className="text-xs text-center p-4 text-gray-500 italic">No faculty available. Add them in the Faculty tab.</p> : null}
+              {faculty.map(f => (
+                <label key={f.id} className={`flex items-center gap-3 text-sm p-2 rounded-lg cursor-pointer transition-all duration-200 ${form.facultyIds.includes(f.id.toString()) ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-100' : 'hover:bg-white/5 border border-transparent text-gray-400 hover:text-gray-200'}`}>
+                  <input type="checkbox" className="accent-emerald-500 w-4 h-4 rounded focus:ring-emerald-500 focus:ring-offset-gray-900 cursor-pointer" checked={form.facultyIds.includes(f.id.toString())} onChange={() => handleFacultyToggle(f.id)} />
+                  <div className="flex flex-col truncate">
+                    <span className="font-medium">{f.name}</span>
+                    {f.teachingArea && <span className="text-[10px] opacity-60 font-medium tracking-wide uppercase">{f.teachingArea}</span>}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+        <div className="flex gap-3 justify-end pt-4 border-t border-white/10 relative z-10 mt-6">
+          {editingId && (
+            <button className="px-5 py-2.5 rounded-xl border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors" onClick={() => { setEditingId(null); setForm(empty); }}>
+              Cancel
+            </button>
+          )}
+          <button className={`px-6 py-2.5 rounded-xl font-bold text-white shadow-lg transition-all duration-300 hover:-translate-y-0.5 ${editingId ? "bg-gradient-to-r from-emerald-500 to-teal-500 hover:shadow-emerald-500/25" : "bg-gradient-to-r from-indigo-500 to-purple-500 hover:shadow-indigo-500/25"}`} onClick={save}>
+            {editingId ? "Save Changes" : "Create Course"}
+          </button>
         </div>
       </div>
 
-      <div className="rounded-2xl border overflow-hidden" style={{ background: C.card, borderColor: C.border }}>
-        <table className="tw-table">
-          <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Cr</th><th>Sess</th><th>Spec</th><th>Term</th><th></th></tr></thead>
-          <tbody>
-            {paged.map(c => (
-              <tr key={c.id}>
-                <td className="font-medium" style={{ color: C.text }}>{c.code}</td>
-                <td style={{ color: C.text }}>{c.name}</td>
-                <td><span className={c.type === "core" ? "badge-success" : c.type === "specialisation" ? "badge-warning" : "badge-danger"}>{c.type}</span></td>
-                <td style={{ color: C.sub }}>{c.credits}</td>
-                <td style={{ color: C.sub }}>{c.totalSessions}</td>
-                <td style={{ color: C.sub }}>{c.specialisation?.name || "—"}</td>
-                <td style={{ color: C.sub }}>{c.term ? `${c.term.programme?.name} — T${c.term.number}` : "—"}</td>
-                <td><button style={{ ...qBtn, padding: "3px 10px", fontSize: 11 }} onClick={() => { setEditingId(c.id); setForm({ code: c.code, name: c.name, credits: c.credits.toString(), termId: c.termId?.toString() || "", type: c.type, specialisationId: c.specialisationId?.toString() || "" }); }}>✏️</button></td>
+      <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden shadow-xl">
+        <table className="w-full text-left text-sm text-gray-300">
+          <thead className="text-xs uppercase bg-black/40 text-gray-400 border-b border-white/10">
+            <tr>
+              <th className="px-6 py-4 font-semibold tracking-wider">Code</th>
+              <th className="px-6 py-4 font-semibold tracking-wider">Name</th>
+              <th className="px-6 py-4 font-semibold tracking-wider">Type</th>
+              <th className="px-6 py-4 font-semibold tracking-wider">Credits & Sessions</th>
+              <th className="px-6 py-4 font-semibold tracking-wider w-64">Mapped Terms</th>
+              <th className="px-6 py-4 font-semibold tracking-wider w-64">Faculty Assigned</th>
+              <th className="px-6 py-4 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {paged.map((c: any) => (
+              <tr key={c.id} className="hover:bg-white/[0.02] transition-colors duration-200">
+                <td className="px-6 py-4 font-semibold text-white whitespace-nowrap">{c.code}</td>
+                <td className="px-6 py-4 font-medium text-gray-200">{c.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full ${
+                    c.type === "core" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20" : 
+                    c.type === "specialisation" ? "bg-amber-500/20 text-amber-400 border border-amber-500/20" : 
+                    "bg-rose-500/20 text-rose-400 border border-rose-500/20"
+                  }`}>
+                    {c.type}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-gray-400 font-medium whitespace-nowrap">
+                  <span className="text-gray-300">{c.credits}</span> Cr <span className="opacity-50 mx-1">•</span> <span className="text-gray-300">{c.totalSessions}</span> Sess
+                </td>
+                <td className="px-6 py-4">
+                  {c.courseTerms && c.courseTerms.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 max-w-[250px]">
+                      {c.courseTerms.map((ct: any) => (
+                         <span key={ct.termId} className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 rounded text-[10px] font-semibold tracking-wide whitespace-nowrap" title={ct.term.programme?.name}>
+                           {ct.term.programme?.code} <span className="opacity-60">T{ct.term.number}</span>
+                         </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {c.specialisation ? <span className="inline-block mt-2 px-2 py-0.5 bg-gray-800 border border-gray-700 text-gray-300 rounded text-[10px] font-medium max-w-[200px] truncate" title={c.specialisation.name}>{c.specialisation.name}</span> : null}
+                  {(!c.courseTerms || c.courseTerms.length === 0) && !c.specialisation && <span className="text-gray-600 italic text-xs">Unmapped</span>}
+                </td>
+                <td className="px-6 py-4">
+                  {c.facultyCourses && c.facultyCourses.length > 0 ? (
+                    <div className="flex flex-col gap-1 max-w-[200px]">
+                      {c.facultyCourses.map((fc: any) => (
+                        <div key={fc.facultyId} className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 shrink-0"></div>
+                          <span className="text-xs text-gray-300 truncate hover:text-white transition-colors cursor-default" title={fc.faculty.name}>
+                            {fc.faculty.name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[11px] uppercase tracking-wider font-semibold text-rose-500/70 bg-rose-500/10 px-2 py-1 rounded inline-block">Unassigned</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 text-right whitespace-nowrap relative">
+                  <button className="p-2 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition-all duration-200 hover:scale-110 active:scale-95 group focus:outline-none focus:ring-2 focus:ring-indigo-500/50" 
+                    title="Edit Course"
+                    onClick={() => { 
+                    setEditingId(c.id); 
+                    setForm({ 
+                      code: c.code, name: c.name, credits: c.credits.toString(), 
+                      termIds: c.courseTerms ? c.courseTerms.map((ct: any) => ct.termId.toString()) : [], 
+                      type: c.type, 
+                      specialisationId: c.specialisationId?.toString() || "",
+                      facultyIds: c.facultyCourses ? c.facultyCourses.map((fc: any) => fc.facultyId.toString()) : []
+                    });
+                    
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -590,6 +778,12 @@ function TimetableTab() {
   const filtCourses = selDiv ? courses.filter(c => selDiv.type === "core" ? c.type === "core" : (c.type === "specialisation" && c.specialisationId === selDiv.specialisationId)) : courses;
   const filtEntries = filterDiv ? entries.filter(e => e.divisionId === parseInt(filterDiv)) : entries;
 
+  // Filter faculties available based on the currently selected course
+  const selectedCourseObj = courses.find(c => c.id === parseInt(form.courseId));
+  const availableFaculties = selectedCourseObj && (selectedCourseObj as any).facultyCourses 
+    ? (selectedCourseObj as any).facultyCourses.map((fc: any) => fc.faculty)
+    : faculty; // Fallback to all if course not selected or mappings missing
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -614,12 +808,15 @@ function TimetableTab() {
         <Label text="Add Timetable Entry" />
         <Err msg={error} />
         <div className="flex gap-2 flex-wrap items-end">
-          <select className={inputCls} style={{ width: 140 }} value={form.divisionId} onChange={e => { setForm({ ...form, divisionId: e.target.value, courseId: "" }); setFilterDiv(e.target.value); }}><option value="">Division</option>{divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+          <select className={inputCls} style={{ width: 140 }} value={form.divisionId} onChange={e => { setForm({ ...form, divisionId: e.target.value, courseId: "", facultyId: "" }); setFilterDiv(e.target.value); }}><option value="">Division</option>{divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
           <select className={inputCls} style={{ width: 200 }} value={form.courseId} onChange={e => setForm({ ...form, courseId: e.target.value, facultyId: "" })}><option value="">Course</option>{filtCourses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}</select>
-          <select className={inputCls} style={{ width: 180 }} value={form.facultyId} onChange={e => setForm({ ...form, facultyId: e.target.value })}><option value="">Faculty (optional)</option>{faculty.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>
+          <select className={inputCls} style={{ width: 180 }} value={form.facultyId} onChange={e => setForm({ ...form, facultyId: e.target.value })}>
+            <option value="">Faculty (Required)</option>
+            {availableFaculties.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
           <input type="date" className={inputCls} style={{ width: 140 }} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
           <select className={inputCls} style={{ width: 160 }} value={form.slotNumber} onChange={e => setForm({ ...form, slotNumber: e.target.value })}>{FIXED_SLOTS.map(s => <option key={s.slot} value={s.slot}>Slot {s.slot} ({s.start})</option>)}</select>
-          <button style={qBtn} onClick={addEntry}>Add</button>
+          <button style={qBtn} onClick={addEntry} disabled={!form.divisionId || !form.courseId || !form.facultyId}>Add</button>
         </div>
       </div>
 

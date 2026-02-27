@@ -10,7 +10,6 @@ const NAV = [
   { href: "/office",            icon: "📊", label: "Dashboard"  },
   { href: "/office/manage",     icon: "⚙️", label: "Manage"     },
   { href: "/office/attendance", icon: "✅", label: "Attendance" },
-  { href: "/office/calendar",   icon: "📅", label: "Calendar"   },
 ];
 
 export default function OfficeSidebar({ userName }: Props) {

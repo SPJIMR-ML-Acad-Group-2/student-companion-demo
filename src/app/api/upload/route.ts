@@ -61,6 +61,20 @@ export async function POST(req: NextRequest) {
       include: { course: true, division: true },
     });
 
+    // Issue #2 fix: fetch ALL students in timetable divisions (not just those who swiped)
+    // so that non-swiping students can be marked absent.
+    const allTimetableDivisionIds = [...new Set(timetableEntries.map(t => t.divisionId))];
+    const allDivisionStudents = await prisma.user.findMany({
+      where: {
+        role: "student",
+        OR: [
+          { coreDivisionId: { in: allTimetableDivisionIds } },
+          { specDivisionId: { in: allTimetableDivisionIds } },
+        ],
+      },
+      select: { id: true, coreDivisionId: true, specDivisionId: true },
+    });
+
     const results = {
       totalSwipes: swipes.length,
       studentsMatched: students.length,
@@ -86,14 +100,14 @@ export async function POST(req: NextRequest) {
         const divisionId = slot.divisionId;
         const divisionType = slot.division.type; // "core" | "specialisation"
 
-        // Find students in this division
-        const divStudents = students.filter(s => {
+        // All students in this division (includes non-swipers — needed for absent marking)
+        const allStudentsInDivision = allDivisionStudents.filter(s => {
           if (divisionType === "core") return s.coreDivisionId === divisionId;
           if (divisionType === "specialisation") return s.specDivisionId === divisionId;
           return false;
         });
 
-        if (divStudents.length === 0) continue;
+        if (allStudentsInDivision.length === 0) continue;
 
         // Find timetable record
         const timetableRecord = await prisma.timetable.findUnique({
@@ -112,8 +126,8 @@ export async function POST(req: NextRequest) {
         }
 
         // Mark timetable as conducted
-        if (!timetableRecord.isConducted) {
-          await prisma.timetable.update({
+        if (!(timetableRecord as any).isConducted) {
+          await (prisma.timetable.update as any)({
             where: { id: timetableRecord.id },
             data: { isConducted: true },
           });
@@ -136,35 +150,34 @@ export async function POST(req: NextRequest) {
             : student.specDivisionId === divisionId;
           if (!inThisDivision) continue;
 
-          // Already marked for this session? Skip duplicate punches
+          // Ignore punches outside this slot's time window (they belong to other slots)
+          const swipeMinutes = timeToMinutes(swipe.timeStr);
+          if (swipeMinutes < slotStartMinutes || swipeMinutes > slotEndMinutes) continue;
+
+          // Already marked present for this slot? Skip extra punches within the same window
           if (markedStudents.has(student.id)) {
             results.duplicatesSkipped++;
             continue;
           }
 
-          const swipeMinutes = timeToMinutes(swipe.timeStr);
-
-          // Present if punch is within [startTime, endTime]
-          if (swipeMinutes >= slotStartMinutes && swipeMinutes <= slotEndMinutes) {
-            try {
-              await (prisma.attendance.upsert as any)({
-                where: { timetableId_studentId: { timetableId: timetableRecord.id, studentId: student.id } },
-                update: { status: "P", swipeTime: swipe.timeStr },
-                create: { timetableId: timetableRecord.id, studentId: student.id, status: "P", swipeTime: swipe.timeStr },
-              });
-              markedStudents.add(student.id);
-              results.attendanceMarked++;
-            } catch (err) {
-              results.errors.push(`Error marking ${swipe.rollNumber}: ${err}`);
-            }
+          try {
+            await (prisma.attendance.upsert as any)({
+              where: { timetableId_studentId: { timetableId: timetableRecord.id, studentId: student.id } },
+              update: { status: "P", swipeTime: swipe.timeStr },
+              create: { timetableId: timetableRecord.id, studentId: student.id, status: "P", swipeTime: swipe.timeStr },
+            });
+            markedStudents.add(student.id);
+            results.attendanceMarked++;
+          } catch (err) {
+            results.errors.push(`Error marking ${swipe.rollNumber}: ${err}`);
           }
         }
 
         // Edge case: If no one in the class punched the biometric for this slot, do NOT mark anyone absent.
         // We leave the attendance records empty so it gets flagged on the UI.
         if (markedStudents.size > 0) {
-          // Mark absent students (in this division but not swiped)
-          for (const student of divStudents) {
+          // Mark absent students (students in this division who did NOT swipe today for this slot)
+          for (const student of allStudentsInDivision) {
             if (markedStudents.has(student.id)) continue;
 
             const existing = await (prisma.attendance.findUnique as any)({

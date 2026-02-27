@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 
 interface DivisionSummary {
   divisionId: number; divisionName: string; divisionType: string; batchId: number | null;
-  studentCount: number; totalSessions: number;
+  studentCount: number; studentCountByBatch?: Record<number, number>; displayStudentCount?: number; totalSessions: number;
   courses: CourseStat[];
 }
 interface CourseStat {
@@ -41,12 +41,8 @@ export default function OfficeDashboard() {
       setProgrammes(data.programmes);
       setSpecialisations(data.specialisations || []);
       setRecentSessions(data.recentSessions);
-      if (data.programmes.length > 0 && !selectedBatchId) {
-        const first = data.programmes.find((p: ProgrammeSummary) => p.batch)?.batch;
-        if (first) setSelectedBatchId(first.id.toString());
-      }
     }
-  }, [selectedBatchId]);
+  }, []);
 
   useEffect(() => { fetchDashboard().then(() => setLoading(false)); }, [fetchDashboard]);
 
@@ -61,10 +57,12 @@ export default function OfficeDashboard() {
   // Filter by selected batch
   const filtered = programmes.filter(p => !selectedBatchId || p.batch?.id.toString() === selectedBatchId);
 
-  // Filter spec divisions by the selected batch id
+  // Filter spec divisions by the selected batch id safely using the new mixed-cohort batchesInvolved array
   const filteredSpecs = specialisations.map(spec => ({
     ...spec,
-    divisions: spec.divisions.filter(d => !selectedBatchId || d.batchId?.toString() === selectedBatchId),
+    divisions: spec.divisions
+      .filter((d: any) => !selectedBatchId || (d.batchesInvolved && d.batchesInvolved.includes(Number(selectedBatchId))))
+      .map((d: any) => ({ ...d, displayStudentCount: selectedBatchId && d.studentCountByBatch ? d.studentCountByBatch[Number(selectedBatchId)] || 0 : d.studentCount })),
   })).filter(spec => spec.divisions.length > 0);
 
   const totalStudents = filtered.reduce((s, p) => s + (p.studentCount || 0), 0);
@@ -132,23 +130,27 @@ export default function OfficeDashboard() {
         </div>
       ))}
 
-      {/* Specialisation Divisions */}
+      {/* Specialisation Divisions (Grid View) */}
       {filteredSpecs.length > 0 && (
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>⭐ Specialisation Divisions</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold" style={{ color: "var(--color-text-primary)" }}>Specialisation Divisions</h2>
           </div>
-          {filteredSpecs.map((spec, si) => (
-            <div key={spec.id} className="mb-4">
-              <h3 className="text-sm font-semibold mb-2">
-                <span style={{ color: "var(--color-text-primary)" }}>{spec.name}</span>{" "}
-                <span className="text-xs" style={{ color: "var(--color-accent-sec)" }}>({spec.code})</span>
-              </h3>
-              {spec.divisions.map((div, di) => (
-                <DivisionCard key={div.divisionId} div={div} delay={(si * 2 + di) * 0.1} onViewLowAttendance={setLowModal} />
-              ))}
-            </div>
-          ))}
+          <div className="space-y-8">
+            {filteredSpecs.map((spec, si) => (
+              <div key={spec.id} className="mb-4">
+                <h3 className="text-base font-semibold mb-4 border-b pb-2" style={{ borderColor: 'var(--color-border)' }}>
+                  <span style={{ color: "var(--color-text-primary)" }}>{spec.name}</span>{" "}
+                  <span className="text-sm" style={{ color: "var(--color-accent-sec)" }}>({spec.code})</span>
+                </h3>
+                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+                  {spec.divisions.map((div, di) => (
+                    <CompactDivisionCard key={div.divisionId} div={div} delay={(si * 2 + di) * 0.1} onViewLowAttendance={setLowModal} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -224,7 +226,7 @@ function DivisionCard({ div, delay, onViewLowAttendance }: {
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>Division {div.divisionName}</div>
-          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>{div.studentCount} students · {div.totalSessions} sessions</div>
+          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>{div.displayStudentCount ?? div.studentCount} students · {div.totalSessions} sessions</div>
         </div>
       </div>
       {div.courses.some(c => c.totalSessions > 0) ? (
@@ -270,4 +272,55 @@ function DivisionCard({ div, delay, onViewLowAttendance }: {
       ) : <p className="text-sm" style={{ color: "var(--color-text-muted)", padding: "8px 0" }}>No sessions yet.</p>}
     </div>
   );
+}
+
+function CompactDivisionCard({ div, delay, onViewLowAttendance }: {
+  div: DivisionSummary; delay: number;
+  onViewLowAttendance: (data: { courseName: string; students: DivisionSummary["courses"][0]["lowAttendanceStudents"] }) => void;
+}) {
+  return (
+    <div className="rounded-2xl border p-5 transition-all hover:-translate-y-1 hover:shadow-lg" style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border)", animationDelay: `${delay}s` }}>
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <div className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>{div.divisionName}</div>
+          <div className="text-xs font-semibold uppercase tracking-wider mt-1" style={{ color: "var(--color-accent-sec)" }}>Division</div>
+        </div>
+        <div className="text-right">
+          <div className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>{div.displayStudentCount ?? div.studentCount}</div>
+          <div className="text-xs" style={{ color: "var(--color-text-muted)" }}>Students</div>
+        </div>
+      </div>
+      
+      <div className="flex items-center justify-between mb-4 p-3 rounded-xl" style={{ background: "var(--color-bg-secondary)" }}>
+        <div className="text-sm font-medium" style={{ color: "var(--color-text-secondary)" }}>Sessions Conducted</div>
+        <div className="text-base font-bold" style={{ color: "var(--color-text-primary)" }}>{div.totalSessions}</div>
+      </div>
+
+      <div className="space-y-3 mt-4">
+        {div.courses.slice(0, 3).map(c => {
+          const hasAlerts = c.lowAttendanceStudents.length > 0;
+          return (
+           <div key={c.courseId} className="flex justify-between items-center text-sm border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
+             <span className="truncate font-medium pr-2 max-w-[120px]" style={{ color: "var(--color-text-primary)" }} title={c.courseName}>{c.courseCode}</span>
+             <div className="flex items-center gap-3">
+               <span className={`font-bold ${c.avgAttendance >= 85 ? 'text-green-500' : c.avgAttendance >= 75 ? 'text-yellow-500' : 'text-red-500'}`}>{c.avgAttendance}%</span>
+               {hasAlerts && (
+                 <button
+                    onClick={() => onViewLowAttendance({ courseName: c.courseName, students: c.lowAttendanceStudents })}
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                    title={`${c.lowAttendanceStudents.length} Students below 75%`}
+                 >
+                   !
+                 </button>
+               )}
+             </div>
+           </div>
+          )
+        })}
+        {div.courses.length === 0 && (
+          <div className="text-xs text-center italic py-2" style={{ color: "var(--color-text-muted)" }}>No active courses</div>
+        )}
+      </div>
+    </div>
+  )
 }

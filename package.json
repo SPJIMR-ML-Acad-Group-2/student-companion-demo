@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "node prisma/setup-db.mjs && prisma generate && prisma db push --accept-data-loss",
+    "setup-local": "node prisma/setup-db.mjs && prisma db push --accept-data-loss --force-reset && prisma db seed"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

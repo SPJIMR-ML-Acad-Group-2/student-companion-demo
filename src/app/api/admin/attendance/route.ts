@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const att = attendanceMap.get(s.id);
     return {
       studentId:    s.id,
-      name:         s.name,
+      studentName:  s.name, // Fixed: This needs to map to studentName so the UI can render `r.studentName`
       rollNumber:   s.rollNumber,
       attendanceId: att?.id    || null,
       status:       att?.status || "None",

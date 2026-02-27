@@ -82,10 +82,11 @@ async function buildDivisionSummaries(
   return Promise.all(divs.map(async (div) => {
     const students = await prisma.user.findMany({ where: { [studentDivField]: div.id, role: "student" } });
     const timetableSlots = await prisma.timetable.findMany({ where: { divisionId: div.id, isConducted: true }, include: { course: true } });
-    const courseFilter: Record<string, unknown> = { timetable: { some: { divisionId: div.id } } };
-    if (activeTermId) courseFilter.termId = activeTermId;
+    const courseFilter: any = { timetable: { some: { divisionId: div.id } } };
+    if (activeTermId) {
+      courseFilter.courseTerms = { some: { termId: activeTermId } };
+    }
     const courses = await prisma.course.findMany({ where: courseFilter });
-
     const courseStats = await Promise.all(courses.map(async (course) => {
       const courseSlots = timetableSlots.filter(t => t.courseId === course.id);
       const timetableIds = courseSlots.map(t => t.id);
@@ -103,6 +104,24 @@ async function buildDivisionSummaries(
       return { courseId: course.id, courseCode: course.code, courseName: course.name, courseType: course.type, credits: course.credits, totalSessions: courseSlots.length, avgAttendance: students.length > 0 ? Math.round(totalPct / students.length) : 0, lowAttendanceStudents: low };
     }));
 
-    return { divisionId: div.id, divisionName: div.name, divisionType: div.type, batchId: div.batchId ?? null, studentCount: students.length, totalSessions: timetableSlots.length, courses: courseStats };
+    const batchesInvolved = Array.from(new Set(students.map(s => s.batchId).filter(Boolean))) as number[];
+    const studentCountByBatch = students.reduce((acc, s) => {
+      if (s.batchId) {
+        acc[s.batchId] = (acc[s.batchId] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<number, number>);
+
+    return { 
+      divisionId: div.id, 
+      divisionName: div.name, 
+      divisionType: div.type, 
+      batchId: div.batchId ?? null, 
+      batchesInvolved,
+      studentCount: students.length,
+      studentCountByBatch,
+      totalSessions: timetableSlots.length, 
+      courses: courseStats 
+    };
   }));
 }

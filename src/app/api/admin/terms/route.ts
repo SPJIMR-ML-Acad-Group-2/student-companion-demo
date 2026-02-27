@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const programmeId = req.nextUrl.searchParams.get("programmeId");
   const terms = await prisma.term.findMany({
     where: programmeId ? { programmeId: parseInt(programmeId) } : {},
-    include: { programme: true, _count: { select: { courses: true } } },
+    include: { programme: true, _count: { select: { CourseTerm: true } } },
     orderBy: [{ programmeId: "asc" }, { number: "asc" }],
   });
   return NextResponse.json(terms);

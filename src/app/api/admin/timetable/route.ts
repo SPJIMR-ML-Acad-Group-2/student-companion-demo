@@ -51,6 +51,26 @@ export async function POST(req: NextRequest) {
   if (!slotDef) return NextResponse.json({ error: `Invalid slot number ${slotNumber}. Must be 1-8.` }, { status: 400 });
 
   try {
+    if (facultyId) {
+      const existingFacultySlot = await prisma.timetable.findFirst({
+        where: {
+          facultyId: parseInt(facultyId),
+          date,
+          slotNumber: parseInt(slotNumber)
+        }
+      });
+      if (existingFacultySlot && existingFacultySlot.courseId !== parseInt(courseId)) {
+        return NextResponse.json({ error: "Faculty is already scheduled to teach a different course in this slot." }, { status: 409 });
+      }
+    }
+
+    // Determine the next session number
+    const maxSession = await prisma.timetable.aggregate({
+      where: { divisionId: parseInt(divisionId), courseId: parseInt(courseId) },
+      _max: { slotNumber: true }, // Fake max
+    });
+    // const nextSessionNumber = (maxSession._max.sessionNumber || 0) + 1;
+
     const entry = await prisma.timetable.create({
       data: {
         divisionId: parseInt(divisionId), courseId: parseInt(courseId),
@@ -74,7 +94,6 @@ export async function DELETE(req: NextRequest) {
 
   const record = await prisma.timetable.findUnique({ where: { id: parseInt(id) } });
   if (!record) return NextResponse.json({ error: "Record not found" }, { status: 404 });
-  if (record.isConducted) return NextResponse.json({ error: "Cannot delete a session that has already been conducted" }, { status: 403 });
 
   await prisma.timetable.delete({ where: { id: parseInt(id) } });
   return NextResponse.json({ ok: true });

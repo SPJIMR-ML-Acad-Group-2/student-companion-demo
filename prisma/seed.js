@@ -26,6 +26,7 @@ async function main() {
   await prisma.attendance.deleteMany();
   await prisma.timetable.deleteMany();
   await prisma.facultyCourse.deleteMany();
+  await prisma.courseTerm.deleteMany();
   await prisma.course.deleteMany();
   await prisma.user.deleteMany();
   await prisma.term.deleteMany();
@@ -77,14 +78,16 @@ async function main() {
   const divD = await prisma.division.create({ data: { name: "D", type: "core", batchId: pgdmBm2527.id } });
   const divE = await prisma.division.create({ data: { name: "E", type: "core", batchId: pgdmBm2527.id } });
 
-  // ─── Specialisation Divisions ───────────────────────
-  const finA = await prisma.division.create({ data: { name: "FIN-A", type: "specialisation", batchId: pgdm2527.id, specialisationId: fin.id } });
-  const finB = await prisma.division.create({ data: { name: "FIN-B", type: "specialisation", batchId: pgdm2527.id, specialisationId: fin.id } });
-  const mktA = await prisma.division.create({ data: { name: "MKT-A", type: "specialisation", batchId: pgdm2527.id, specialisationId: mkt.id } });
-  const mktB = await prisma.division.create({ data: { name: "MKT-B", type: "specialisation", batchId: pgdm2527.id, specialisationId: mkt.id } });
-  const imA  = await prisma.division.create({ data: { name: "IM-A",  type: "specialisation", batchId: pgdm2527.id, specialisationId: im.id  } });
-  const imB  = await prisma.division.create({ data: { name: "IM-B",  type: "specialisation", batchId: pgdm2527.id, specialisationId: im.id  } });
-  const opsA = await prisma.division.create({ data: { name: "OPS-A", type: "specialisation", batchId: pgdm2527.id, specialisationId: ops.id } });
+  // ─── Specialisation Divisions (Mixed Cohorts) ─────────
+  const finA = await prisma.division.create({ data: { name: "FIN-A", type: "specialisation", specialisationId: fin.id } });
+  const mktA = await prisma.division.create({ data: { name: "MKT-A", type: "specialisation", specialisationId: mkt.id } });
+  const imA  = await prisma.division.create({ data: { name: "IM-A",  type: "specialisation", specialisationId: im.id  } });
+  const opsA = await prisma.division.create({ data: { name: "OPS-A", type: "specialisation", specialisationId: ops.id } });
+
+  const finB = await prisma.division.create({ data: { name: "FIN-B", type: "specialisation", specialisationId: fin.id } });
+  const mktB = await prisma.division.create({ data: { name: "MKT-B", type: "specialisation", specialisationId: mkt.id } });
+  const imB  = await prisma.division.create({ data: { name: "IM-B",  type: "specialisation", specialisationId: im.id  } });
+  const opsB = await prisma.division.create({ data: { name: "OPS-B", type: "specialisation", specialisationId: ops.id } });
 
   // ─── Office User ────────────────────────────────────
   console.log("👤 Creating office user...");
@@ -133,20 +136,20 @@ async function main() {
     }
   }
 
-  // PGDM 2025-27: 3 divs × 10 = 30 students. Spec: FIN 8, MKT 7, OPS 6, IM 9
+  // PGDM 2025-27: 3 divs × 10 = 30 students. Spec: FIN 8, MKT 7, OPS 7, IM 8
   await createStudents(pgdm2527, pgdm, [divA, divB, divC], 10, [
     { specId: fin.id, count: 8, divs: [finA, finB] },
     { specId: mkt.id, count: 7, divs: [mktA, mktB] },
-    { specId: ops.id, count: 6, divs: [opsA] },
-    { specId: im.id,  count: 9, divs: [imA, imB] },
+    { specId: ops.id, count: 7, divs: [opsA, opsB] },
+    { specId: im.id,  count: 8, divs: [imA, imB] },
   ]);
 
-  // PGDM(BM) 2025-27: 2 divs × 10 = 20 students. Spec: FIN 5, MKT 5, OPS 4, IM 6
+  // PGDM(BM) 2025-27: 2 divs × 10 = 20 students. Spec: FIN 5, MKT 7, OPS 4, IM 4
   await createStudents(pgdmBm2527, pgdmBm, [divD, divE], 10, [
     { specId: fin.id, count: 5, divs: [finA, finB] },
-    { specId: mkt.id, count: 5, divs: [mktA, mktB] },
-    { specId: ops.id, count: 4, divs: [opsA] },
-    { specId: im.id,  count: 6, divs: [imA, imB] },
+    { specId: mkt.id, count: 7, divs: [mktA, mktB] },
+    { specId: ops.id, count: 4, divs: [opsA, opsB] },
+    { specId: im.id,  count: 4, divs: [imA, imB] },
   ]);
 
   // ─── Faculty ────────────────────────────────────────
@@ -190,40 +193,40 @@ async function main() {
   console.log("📘 Creating courses...");
 
   // Core — PGDM 2025-27
-  const hrm_pdm = await prisma.course.create({ data: { code: "OLS515-PDM-46", name: "Human Resource Management",       totalSessions: 26, credits: 3, type: "core",           termId: t3pgdm.id } });
-  const bps_pdm = await prisma.course.create({ data: { code: "STR507-PDM-46", name: "Business Policy and Strategy II", totalSessions: 26, credits: 3, type: "core",           termId: t3pgdm.id } });
-  const ds_pdm  = await prisma.course.create({ data: { code: "QTM522-PDM-46", name: "Decision Science",                totalSessions: 26, credits: 3, type: "core",           termId: t3pgdm.id } });
-  const ma_pdm  = await prisma.course.create({ data: { code: "ACC506-PDM-46", name: "Management Accounting",           totalSessions: 26, credits: 3, type: "core",           termId: t3pgdm.id } });
+  const hrm_pdm = await prisma.course.create({ data: { code: "OLS515-PDM-46", name: "Human Resource Management",       totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3pgdm.id }] } } });
+  const bps_pdm = await prisma.course.create({ data: { code: "STR507-PDM-46", name: "Business Policy and Strategy II", totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3pgdm.id }] } } });
+  const ds_pdm  = await prisma.course.create({ data: { code: "QTM522-PDM-46", name: "Decision Science",                totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3pgdm.id }] } } });
+  const ma_pdm  = await prisma.course.create({ data: { code: "ACC506-PDM-46", name: "Management Accounting",           totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3pgdm.id }] } } });
 
   // Core — PGDM(BM) 2025-27
-  const hrm_bm  = await prisma.course.create({ data: { code: "OLS515-PBM-04", name: "Human Resource Management",       totalSessions: 26, credits: 3, type: "core",           termId: t3bm.id } });
-  const bps_bm  = await prisma.course.create({ data: { code: "STR507-PBM-04", name: "Business Policy and Strategy II", totalSessions: 26, credits: 3, type: "core",           termId: t3bm.id } });
-  const ds_bm   = await prisma.course.create({ data: { code: "QTM522-PBM-04", name: "Decision Science",                totalSessions: 26, credits: 3, type: "core",           termId: t3bm.id } });
-  const ma_bm   = await prisma.course.create({ data: { code: "ACC506-PBM-04", name: "Management Accounting",           totalSessions: 26, credits: 3, type: "core",           termId: t3bm.id } });
+  const hrm_bm  = await prisma.course.create({ data: { code: "OLS515-PBM-04", name: "Human Resource Management",       totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3bm.id }] } } });
+  const bps_bm  = await prisma.course.create({ data: { code: "STR507-PBM-04", name: "Business Policy and Strategy II", totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3bm.id }] } } });
+  const ds_bm   = await prisma.course.create({ data: { code: "QTM522-PBM-04", name: "Decision Science",                totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3bm.id }] } } });
+  const ma_bm   = await prisma.course.create({ data: { code: "ACC506-PBM-04", name: "Management Accounting",           totalSessions: 26, credits: 3, type: "core",           courseTerms: { create: [{ termId: t3bm.id }] } } });
 
   // Spec — IM
-  const dpm  = await prisma.course.create({ data: { code: "INF522-PDM-46", name: "Digital Product Management",               totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: im.id  } });
-  const bia  = await prisma.course.create({ data: { code: "ANA522-PDM-46", name: "Business Intelligence and Analytics",      totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: im.id  } });
-  const eit  = await prisma.course.create({ data: { code: "INF524-PDM-46", name: "Enterprise IT",                            totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: im.id  } });
-  const mlab = await prisma.course.create({ data: { code: "INF530-PDM-46", name: "Maker Lab",                                totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: im.id  } });
+  const dpm  = await prisma.course.create({ data: { code: "INF522-PDM-46", name: "Digital Product Management",               totalSessions: 26, credits: 3, type: "specialisation", specialisationId: im.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] }  } });
+  const bia  = await prisma.course.create({ data: { code: "ANA522-PDM-46", name: "Business Intelligence and Analytics",      totalSessions: 26, credits: 3, type: "specialisation", specialisationId: im.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] }  } });
+  const eit  = await prisma.course.create({ data: { code: "INF524-PDM-46", name: "Enterprise IT",                            totalSessions: 26, credits: 3, type: "specialisation", specialisationId: im.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] }  } });
+  const mlab = await prisma.course.create({ data: { code: "INF530-PDM-46", name: "Maker Lab",                                totalSessions: 26, credits: 3, type: "specialisation", specialisationId: im.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] }  } });
 
   // Spec — Marketing
-  const cb  = await prisma.course.create({ data: { code: "MKT501-PDM-46", name: "Consumer Behaviour",                totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: mkt.id } });
-  const mr  = await prisma.course.create({ data: { code: "MKT502-PDM-46", name: "Marketing Research",                totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: mkt.id } });
-  const sdm = await prisma.course.create({ data: { code: "MKT503-PDM-46", name: "Sales and Distribution Management", totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: mkt.id } });
-  const sbm = await prisma.course.create({ data: { code: "MKT504-PDM-46", name: "Strategic Brand Management",        totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: mkt.id } });
+  const cb  = await prisma.course.create({ data: { code: "MKT501-PDM-46", name: "Consumer Behaviour",                totalSessions: 26, credits: 3, type: "specialisation", specialisationId: mkt.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const mr  = await prisma.course.create({ data: { code: "MKT502-PDM-46", name: "Marketing Research",                totalSessions: 26, credits: 3, type: "specialisation", specialisationId: mkt.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const sdm = await prisma.course.create({ data: { code: "MKT503-PDM-46", name: "Sales and Distribution Management", totalSessions: 26, credits: 3, type: "specialisation", specialisationId: mkt.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const sbm = await prisma.course.create({ data: { code: "MKT504-PDM-46", name: "Strategic Brand Management",        totalSessions: 26, credits: 3, type: "specialisation", specialisationId: mkt.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
 
   // Spec — Finance
-  const cv   = await prisma.course.create({ data: { code: "FIN501-PDM-46", name: "Corporate Valuation",                       totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: fin.id } });
-  const sapm = await prisma.course.create({ data: { code: "FIN502-PDM-46", name: "Security Analysis & Portfolio Management",   totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: fin.id } });
-  const fl   = await prisma.course.create({ data: { code: "FIN503-PDM-46", name: "Financial Laws",                            totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: fin.id } });
-  const fm   = await prisma.course.create({ data: { code: "FIN504-PDM-46", name: "Financial Modelling",                       totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: fin.id } });
+  const cv   = await prisma.course.create({ data: { code: "FIN501-PDM-46", name: "Corporate Valuation",                       totalSessions: 26, credits: 3, type: "specialisation", specialisationId: fin.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const sapm = await prisma.course.create({ data: { code: "FIN502-PDM-46", name: "Security Analysis & Portfolio Management",   totalSessions: 26, credits: 3, type: "specialisation", specialisationId: fin.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const fl   = await prisma.course.create({ data: { code: "FIN503-PDM-46", name: "Financial Laws",                            totalSessions: 26, credits: 3, type: "specialisation", specialisationId: fin.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const fm   = await prisma.course.create({ data: { code: "FIN504-PDM-46", name: "Financial Modelling",                       totalSessions: 26, credits: 3, type: "specialisation", specialisationId: fin.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
 
   // Spec — Operations
-  const som  = await prisma.course.create({ data: { code: "OPS501-PDM-46", name: "Service Operations Management",        totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: ops.id } });
-  const lm   = await prisma.course.create({ data: { code: "OPS502-PDM-46", name: "Logistics Management",                 totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: ops.id } });
-  const pss  = await prisma.course.create({ data: { code: "OPS503-PDM-46", name: "Procurement and Strategic Sourcing",   totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: ops.id } });
-  const scpc = await prisma.course.create({ data: { code: "OPS504-PDM-46", name: "Supply Chain Planning and Coordination", totalSessions: 26, credits: 3, type: "specialisation", termId: t3pgdm.id, specialisationId: ops.id } });
+  const som  = await prisma.course.create({ data: { code: "OPS501-PDM-46", name: "Service Operations Management",        totalSessions: 26, credits: 3, type: "specialisation", specialisationId: ops.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const lm   = await prisma.course.create({ data: { code: "OPS502-PDM-46", name: "Logistics Management",                 totalSessions: 26, credits: 3, type: "specialisation", specialisationId: ops.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const pss  = await prisma.course.create({ data: { code: "OPS503-PDM-46", name: "Procurement and Strategic Sourcing",   totalSessions: 26, credits: 3, type: "specialisation", specialisationId: ops.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
+  const scpc = await prisma.course.create({ data: { code: "OPS504-PDM-46", name: "Supply Chain Planning and Coordination", totalSessions: 26, credits: 3, type: "specialisation", specialisationId: ops.id, courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] } } });
 
   // ─── Faculty-Course Mappings ─────────────────────────
   console.log("🔗 Mapping faculty to courses...");

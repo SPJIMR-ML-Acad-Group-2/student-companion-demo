@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     const allTerms = student.batch?.programme?.Term || [];
     let selectedTerm = student.batch?.activeTerm || allTerms[0];
     if (termIdParam) {
-      const requested = allTerms.find(t => t.id === parseInt(termIdParam));
+      const requested = allTerms.find((t: any) => t.id === parseInt(termIdParam));
       if (requested) selectedTerm = requested as any;
     }
 
@@ -38,26 +38,46 @@ export async function GET(req: Request) {
     if (student.specDivisionId) divisionIds.push(student.specDivisionId);
 
     const timetableEntries = await prisma.timetable.findMany({
-      where: { divisionId: { in: divisionIds } },
-      include: { course: { include: { term: true, specialisation: true } } },
+      where: {
+        divisionId: { in: divisionIds },
+        course: {
+          courseTerms: {
+            some: { termId: selectedTerm?.id }
+          }
+        },
+      },
+      include: { course: true },
     });
 
-    const uniqueCourses = [...new Map(
-      timetableEntries
-        .filter(t => !selectedTerm || !t.course.termId || t.course.termId === selectedTerm.id)
-        .map(t => [t.courseId, { course: t.course, divisionId: t.divisionId }])
-    ).values()];
+    const enrolledCourses = await prisma.course.findMany({
+      where: {
+        courseTerms: {
+          some: { termId: selectedTerm?.id }
+        },
+        OR: [
+          { type: "core" },
+          { type: "specialisation", specialisationId: student.specialisationId }
+        ],
+      },
+      include: { specialisation: true },
+    });
 
     const courseStats = await Promise.all(
-      uniqueCourses.map(async ({ course, divisionId }) => {
+      enrolledCourses.map(async (course) => {
+        // Find which of the student's divisions applies to this course
+        let activeDivisionId = course.type === "core" ? student.coreDivisionId : student.specDivisionId;
+
         const timetableSlots = await prisma.timetable.findMany({
-          where: { courseId: course.id, divisionId, isConducted: true },
+          where: { courseId: course.id, divisionId: activeDivisionId ?? undefined, isConducted: true },
           orderBy: { date: "asc" },
         });
+
         const timetableIds = timetableSlots.map(t => t.id);
-        const attendance = await prisma.attendance.findMany({
-          where: { studentId: student.id, timetableId: { in: timetableIds } },
-        });
+        const attendance = timetableIds.length > 0
+          ? await prisma.attendance.findMany({
+              where: { studentId: student.id, timetableId: { in: timetableIds } },
+            })
+          : [];
 
         const attendanceMap = new Map(attendance.map(a => [a.timetableId, a]));
 
@@ -69,13 +89,11 @@ export async function GET(req: Request) {
         const percentage = totalConducted > 0 ? Math.round(((present + late) / totalConducted) * 100) : 100;
 
         const penalty = getPenaltyInfo(course.credits, absent, late);
-        const thresholds = PENALTY_THRESHOLDS[course.credits] || PENALTY_THRESHOLDS[3];
 
-        // Attendance log per timetable slot
         const log = timetableSlots.map(t => {
           const record = attendanceMap.get(t.id);
           return {
-            sessionId: t.id, // mapped for backwards frontend compat
+            sessionId: t.id,
             sessionNumber: t.sessionNumber,
             date: t.date,
             slot: t.slotNumber,
