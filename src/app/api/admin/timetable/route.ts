@@ -71,6 +71,11 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const record = await prisma.timetable.findUnique({ where: { id: parseInt(id) } });
+  if (!record) return NextResponse.json({ error: "Record not found" }, { status: 404 });
+  if (record.isConducted) return NextResponse.json({ error: "Cannot delete a session that has already been conducted" }, { status: 403 });
+
   await prisma.timetable.delete({ where: { id: parseInt(id) } });
   return NextResponse.json({ ok: true });
 }

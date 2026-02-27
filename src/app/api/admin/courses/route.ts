@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const termId = req.nextUrl.searchParams.get("termId");
   const courses = await prisma.course.findMany({
     where: termId ? { termId: parseInt(termId) } : {},
-    include: { term: { include: { batch: { include: { programme: true } } } }, specialisation: true },
+    include: { term: { include: { programme: true } }, specialisation: true },
     orderBy: { code: "asc" },
   });
   return NextResponse.json(courses);
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest) {
 
   const course = await prisma.course.update({
     where: { id }, data,
-    include: { term: { include: { batch: { include: { programme: true } } } }, specialisation: true },
+    include: { term: { include: { programme: true } }, specialisation: true },
   });
   return NextResponse.json(course);
 }

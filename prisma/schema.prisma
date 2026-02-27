@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -12,46 +12,48 @@ datasource db {
 
 model Programme {
   id       Int     @id @default(autoincrement())
-  code     String  @unique  // PGP, PGPBM — prefix for roll numbers
-  name     String           // PGDM, PGDM (BM)
-  fullName String           // Post Graduate Diploma in Management
+  code     String  @unique // PGP, PGPBM — prefix for roll numbers
+  name     String // PGDM, PGDM (BM)
+  fullName String // Post Graduate Diploma in Management
   batches  Batch[]
+  Term     Term[]
 }
 
 model Batch {
-  id          Int       @id @default(autoincrement())
-  programmeId Int
-  name        String    // "PGDM 2025-27"
-  startYear   Int       // 2025
-  endYear     Int       // 2027
-  isActive    Boolean   @default(true)
-  programme   Programme @relation(fields: [programmeId], references: [id])
-  terms       Term[]
-  students    User[]
-  divisions   Division[] @relation("BatchDivisions")
+  id           Int        @id @default(autoincrement())
+  programmeId  Int
+  activeTermId Int?
+  name         String // "PGDM 2025-27"
+  startYear    Int // 2025
+  endYear      Int // 2027
+  isActive     Boolean    @default(true)
+  programme    Programme  @relation(fields: [programmeId], references: [id])
+  activeTerm   Term?      @relation("ActiveTerm", fields: [activeTermId], references: [id])
+  students     User[]
+  divisions    Division[] @relation("BatchDivisions")
 
   @@unique([programmeId, startYear, endYear])
 }
 
 model Term {
-  id        Int      @id @default(autoincrement())
-  batchId   Int
-  number    Int      // 1, 2, 3...
-  name      String   // "Term 1", "Term 3"
-  startDate String?  // YYYY-MM-DD
-  isActive  Boolean  @default(false)
-  batch     Batch    @relation(fields: [batchId], references: [id])
-  courses   Course[]
+  id          Int       @id @default(autoincrement())
+  programmeId Int
+  number      Int // 1, 2, 3...
+  name        String // "Term 1", "Term 3"
+  isActive    Boolean   @default(false) // Deprecated, use `activeTermId` on Batch
+  programme   Programme @relation(fields: [programmeId], references: [id])
+  courses     Course[]
+  activeFor   Batch[]   @relation("ActiveTerm")
 
-  @@unique([batchId, number])
+  @@unique([programmeId, number])
 }
 
 // ─── Specialisations & Divisions ───────────────────────
 
 model Specialisation {
   id        Int        @id @default(autoincrement())
-  name      String     // "Marketing", "Information Management & Analytics"
-  code      String     @unique  // MKT, IM, FIN, OPS
+  name      String // "Marketing", "Information Management & Analytics"
+  code      String     @unique // MKT, IM, FIN, OPS
   divisions Division[] @relation("SpecDivisions")
   students  User[]     @relation("StudentSpecialisation")
   courses   Course[]   @relation("SpecCourses")
@@ -59,14 +61,13 @@ model Specialisation {
 
 model Division {
   id               Int             @id @default(autoincrement())
-  name             String          // "A", "B", "MKT-A" — scoped by batch, NOT globally unique
-  type             String          // "core" | "specialisation"
-  batchId          Int?            // for core divisions — linked to batch
+  name             String // "A", "B", "MKT-A" — scoped by batch, NOT globally unique
+  type             String // "core" | "specialisation"
+  batchId          Int? // for core divisions — linked to batch
   specialisationId Int?
   batch            Batch?          @relation("BatchDivisions", fields: [batchId], references: [id])
   specialisation   Specialisation? @relation("SpecDivisions", fields: [specialisationId], references: [id])
   timetable        Timetable[]
-  sessions         Session[]
   coreStudents     User[]          @relation("CoreDivision")
   specStudents     User[]          @relation("SpecDivision")
 
@@ -79,8 +80,8 @@ model User {
   id               Int             @id @default(autoincrement())
   name             String
   email            String          @unique
-  role             String          // student | programme_office
-  rollNumber       String?         @unique  // PGP-25-001, PGPBM-25-003
+  role             String // student | programme_office
+  rollNumber       String?         @unique // PGP-25-001, PGPBM-25-003
   batchId          Int?
   coreDivisionId   Int?
   specialisationId Int?
@@ -97,7 +98,7 @@ model Faculty {
   id           Int             @id @default(autoincrement())
   name         String
   email        String          @unique
-  teachingArea String?         // e.g. "Finance and Accounting", "Marketing"
+  teachingArea String? // e.g. "Finance and Accounting", "Marketing"
   courses      FacultyCourse[]
   timetable    Timetable[]
 }
@@ -105,7 +106,7 @@ model Faculty {
 model FacultyCourse {
   id        Int     @id @default(autoincrement())
   facultyId Int
-  courseId   Int
+  courseId  Int
   faculty   Faculty @relation(fields: [facultyId], references: [id])
   course    Course  @relation(fields: [courseId], references: [id])
 
@@ -115,19 +116,18 @@ model FacultyCourse {
 // ─── Courses & Timetable ───────────────────────────────
 
 model Course {
-  id             Int              @id @default(autoincrement())
-  code           String           @unique
-  name           String
-  totalSessions  Int
-  credits        Int              @default(3)
-  termId         Int?
-  type           String           @default("core")  // core | elective | specialisation
+  id               Int             @id @default(autoincrement())
+  code             String          @unique
+  name             String
+  totalSessions    Int
+  credits          Int             @default(3)
+  termId           Int?
+  type             String          @default("core") // core | elective | specialisation
   specialisationId Int?
-  term           Term?            @relation(fields: [termId], references: [id])
-  specialisation Specialisation?  @relation("SpecCourses", fields: [specialisationId], references: [id])
-  facultyCourses FacultyCourse[]
-  timetable      Timetable[]
-  sessions       Session[]
+  term             Term?           @relation(fields: [termId], references: [id])
+  specialisation   Specialisation? @relation("SpecCourses", fields: [specialisationId], references: [id])
+  facultyCourses   FacultyCourse[]
+  timetable        Timetable[]
 }
 
 model Timetable {
@@ -135,43 +135,31 @@ model Timetable {
   divisionId Int
   courseId   Int
   facultyId  Int?
-  date       String   // YYYY-MM-DD (specific date — timetable changes weekly)
-  slotNumber Int      // 1-8 (fixed slots)
-  startTime  String   // from FIXED_SLOTS
-  endTime    String   // from FIXED_SLOTS
-  division   Division @relation(fields: [divisionId], references: [id])
-  course     Course   @relation(fields: [courseId], references: [id])
-  faculty    Faculty? @relation(fields: [facultyId], references: [id])
+  date       String // YYYY-MM-DD (specific date — timetable changes weekly)
+  slotNumber Int // 1-8 (fixed slots)
+  startTime     String // from FIXED_SLOTS
+  endTime       String // from FIXED_SLOTS
+  sessionNumber Int? // sequential session # for display
+  isConducted   Boolean      @default(false)
+  division      Division @relation(fields: [divisionId], references: [id])
+  course        Course   @relation(fields: [courseId], references: [id])
+  faculty       Faculty? @relation(fields: [facultyId], references: [id])
+  attendance    Attendance[]
 
   @@unique([divisionId, date, slotNumber])
 }
 
-// ─── Sessions & Attendance ─────────────────────────────
-
-model Session {
-  id            Int          @id @default(autoincrement())
-  courseId      Int
-  divisionId    Int
-  date          String       // YYYY-MM-DD
-  slotNumber    Int
-  sessionNumber Int?         // sequential session # for display
-  course        Course       @relation(fields: [courseId], references: [id])
-  division      Division     @relation(fields: [divisionId], references: [id])
-  attendance    Attendance[]
-  createdAt     DateTime     @default(now())
-
-  @@unique([courseId, divisionId, date, slotNumber])
-}
+// ─── Attendance ────────────────────────────────────────
 
 model Attendance {
-  id        Int      @id @default(autoincrement())
-  sessionId Int
-  studentId Int
-  status    String   // P | AB | LT | P# (sanctioned leave)
-  swipeTime String?  // HH:mm:ss
-  session   Session  @relation(fields: [sessionId], references: [id])
-  student   User     @relation(fields: [studentId], references: [id])
-  createdAt DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  timetableId Int
+  studentId   Int
+  status      String // P | AB | LT | P# (sanctioned leave)
+  swipeTime   String? // HH:mm:ss
+  timetable   Timetable @relation(fields: [timetableId], references: [id])
+  student     User     @relation(fields: [studentId], references: [id])
+  createdAt   DateTime @default(now())
 
-  @@unique([sessionId, studentId])
+  @@unique([timetableId, studentId])
 }

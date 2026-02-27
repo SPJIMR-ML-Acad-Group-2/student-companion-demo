@@ -6,9 +6,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const programmes = await prisma.programme.findMany({
     include: {
+      Term: { orderBy: { number: "asc" } },
       batches: {
         include: {
-          terms: { orderBy: { number: "asc" } },
+          activeTerm: true,
           divisions: { where: { type: "core" }, orderBy: { name: "asc" } },
           _count: { select: { students: true } },
         },

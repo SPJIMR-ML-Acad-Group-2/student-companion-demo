@@ -61,12 +61,10 @@ export async function POST(req: NextRequest) {
       include: { course: true, division: true },
     });
 
-    // Results tracking
     const results = {
       totalSwipes: swipes.length,
       studentsMatched: students.length,
       studentsNotFound: rollNumbers.length - students.length,
-      sessionsCreated: 0,
       attendanceMarked: 0,
       absentMarked: 0,
       lateMarked: 0,
@@ -97,11 +95,10 @@ export async function POST(req: NextRequest) {
 
         if (divStudents.length === 0) continue;
 
-        // Create/find session
-        let sessionRecord = await prisma.session.findUnique({
+        // Find timetable record
+        const timetableRecord = await prisma.timetable.findUnique({
           where: {
-            courseId_divisionId_date_slotNumber: {
-              courseId: slot.courseId,
+            divisionId_date_slotNumber: {
               divisionId: divisionId,
               date: date,
               slotNumber: slot.slotNumber,
@@ -109,24 +106,24 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        if (!sessionRecord) {
-          sessionRecord = await prisma.session.create({
-            data: {
-              courseId: slot.courseId,
-              divisionId: divisionId,
-              date: date,
-              slotNumber: slot.slotNumber,
-            },
-          });
-          results.sessionsCreated++;
+        if (!timetableRecord) {
+          // If no timetable exists for this slot, we skip.
+          continue;
         }
 
-        // Slot timing
-        const slotStartMinutes = timeToMinutes(slot.startTime);
-        const slotEndMinutes = timeToMinutes(slot.endTime);
-        const lateThreshold = slotStartMinutes + 10; // 10 min grace
+        // Mark timetable as conducted
+        if (!timetableRecord.isConducted) {
+          await prisma.timetable.update({
+            where: { id: timetableRecord.id },
+            data: { isConducted: true },
+          });
+        }
 
-        // Track marked students for this session (dedup multiple punches)
+        // Slot timing — punch must fall within [startTime, endTime] inclusive
+        const slotStartMinutes = timeToMinutes(slot.startTime);
+        const slotEndMinutes   = timeToMinutes(slot.endTime);
+
+        // Track students with a valid swipe for this session
         const markedStudents = new Set<number>();
 
         // Match swipes to this slot
@@ -134,13 +131,12 @@ export async function POST(req: NextRequest) {
           const student = studentMap.get(swipe.rollNumber);
           if (!student) continue;
 
-          // Check if student belongs to this division
           const inThisDivision = divisionType === "core"
             ? student.coreDivisionId === divisionId
             : student.specDivisionId === divisionId;
           if (!inThisDivision) continue;
 
-          // Already marked for this session? Skip (handles multiple punches)
+          // Already marked for this session? Skip duplicate punches
           if (markedStudents.has(student.id)) {
             results.duplicatesSkipped++;
             continue;
@@ -148,34 +144,18 @@ export async function POST(req: NextRequest) {
 
           const swipeMinutes = timeToMinutes(swipe.timeStr);
 
-          // Check if swipe falls within slot window (5 min early to end)
-          if (swipeMinutes >= slotStartMinutes - 5 && swipeMinutes <= slotEndMinutes) {
-            // Only mark Present automatically. If they are late (after lateThreshold), do not auto-mark.
-            if (swipeMinutes <= lateThreshold) {
-              const status = "P";
-
-              try {
-                await prisma.attendance.upsert({
-                  where: {
-                    sessionId_studentId: {
-                      sessionId: sessionRecord.id,
-                      studentId: student.id,
-                    },
-                  },
-                  update: { status, swipeTime: swipe.timeStr },
-                  create: {
-                    sessionId: sessionRecord.id,
-                    studentId: student.id,
-                    status,
-                    swipeTime: swipe.timeStr,
-                  },
-                });
-
-                markedStudents.add(student.id);
-                results.attendanceMarked++;
-              } catch (err) {
-                results.errors.push(`Error marking ${swipe.rollNumber}: ${err}`);
-              }
+          // Present if punch is within [startTime, endTime]
+          if (swipeMinutes >= slotStartMinutes && swipeMinutes <= slotEndMinutes) {
+            try {
+              await (prisma.attendance.upsert as any)({
+                where: { timetableId_studentId: { timetableId: timetableRecord.id, studentId: student.id } },
+                update: { status: "P", swipeTime: swipe.timeStr },
+                create: { timetableId: timetableRecord.id, studentId: student.id, status: "P", swipeTime: swipe.timeStr },
+              });
+              markedStudents.add(student.id);
+              results.attendanceMarked++;
+            } catch (err) {
+              results.errors.push(`Error marking ${swipe.rollNumber}: ${err}`);
             }
           }
         }
@@ -187,19 +167,19 @@ export async function POST(req: NextRequest) {
           for (const student of divStudents) {
             if (markedStudents.has(student.id)) continue;
 
-            const existing = await prisma.attendance.findUnique({
+            const existing = await (prisma.attendance.findUnique as any)({
               where: {
-                sessionId_studentId: {
-                  sessionId: sessionRecord.id,
+                timetableId_studentId: {
+                  timetableId: timetableRecord.id,
                   studentId: student.id,
                 },
               },
             });
 
             if (!existing) {
-              await prisma.attendance.create({
+              await (prisma.attendance.create as any)({
                 data: {
-                  sessionId: sessionRecord.id,
+                  timetableId: timetableRecord.id,
                   studentId: student.id,
                   status: "AB",
                   swipeTime: null,

@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const batches = await prisma.batch.findMany({
-    include: { programme: true, terms: true, _count: { select: { students: true } } },
+    include: { programme: true, activeTerm: true, _count: { select: { students: true } } },
     orderBy: { startYear: "desc" },
   });
   return NextResponse.json(batches);

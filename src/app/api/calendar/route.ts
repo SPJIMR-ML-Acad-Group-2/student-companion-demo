@@ -63,35 +63,26 @@ export async function GET(req: Request) {
     // Get timetable entries for these divisions within the week
     const timetableEntries = await prisma.timetable.findMany({
       where: { divisionId: { in: divisionIds }, date: { in: weekDates } },
-      include: { course: true, division: true, faculty: true },
-      orderBy: [{ date: "asc" }, { slotNumber: "asc" }],
-    });
-
-    // Get sessions for this week
-    const sessions = await prisma.session.findMany({
-      where: {
-        divisionId: { in: divisionIds },
-        date: { in: weekDates },
-      },
-      include: {
-        course: true,
+      include: { 
+        course: true, 
+        division: true, 
+        faculty: true,
         attendance: role === "student" ? { where: { studentId: user.userId } } : { select: { id: true, status: true } },
-        _count: { select: { attendance: true } },
+        _count: { select: { attendance: true } }
       },
+      orderBy: [{ date: "asc" }, { slotNumber: "asc" }],
     });
 
     // Build calendar grid: day → slot → entry
     const calendar = weekDates.map((date, i) => {
       const dayNum = (i + 1) % 7; // Mon=1, Tue=2, ..., Sat=6
       const dayEntries = timetableEntries.filter(t => t.date === date);
-      const daySessions = sessions.filter(s => s.date === date);
 
       return {
         date,
         dayOfWeek: dayNum,
         dayName: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i],
         slots: dayEntries.map(entry => {
-          const session = daySessions.find(s => s.courseId === entry.courseId && s.divisionId === entry.divisionId && s.slotNumber === entry.slotNumber);
           return {
             slotNumber: entry.slotNumber,
             startTime: entry.startTime,
@@ -102,11 +93,11 @@ export async function GET(req: Request) {
             divisionName: entry.division.name,
             divisionId: entry.divisionId,
             facultyName: entry.faculty?.name || null,
-            hasSession: !!session,
-            sessionId: session?.id || null,
-            sessionNumber: session?.sessionNumber || null,
-            attendance: session?.attendance || [],
-            noSwipes: session ? session._count.attendance === 0 : false,
+            hasSession: entry.isConducted,
+            sessionId: entry.id, // temp mapping until frontend is refactored
+            sessionNumber: entry.sessionNumber || null,
+            attendance: entry.attendance || [],
+            noSwipes: entry.isConducted ? entry._count.attendance === 0 : false,
           };
         }),
       };

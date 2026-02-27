@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const specialisations = await prisma.specialisation.findMany({
     include: {
-      divisions: true,
+      divisions: { include: { batch: { include: { programme: true } } } },
       _count: { select: { students: true } },
     },
     orderBy: { name: "asc" },

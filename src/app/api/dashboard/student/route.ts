@@ -19,18 +19,18 @@ export async function GET(req: Request) {
     const student = await prisma.user.findUnique({
       where: { id: user.userId },
       include: {
-        batch: { include: { programme: true, terms: { orderBy: { number: "asc" } } } },
+        batch: { include: { programme: { include: { Term: { orderBy: { number: "asc" } } } }, activeTerm: true } },
         coreDivision: true, specDivision: { include: { specialisation: true } }, specialisation: true,
       },
     });
     if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
 
     // Determine which term to show — active by default, or requested
-    const allTerms = student.batch?.terms || [];
-    let selectedTerm = allTerms.find(t => t.isActive);
+    const allTerms = student.batch?.programme?.Term || [];
+    let selectedTerm = student.batch?.activeTerm || allTerms[0];
     if (termIdParam) {
       const requested = allTerms.find(t => t.id === parseInt(termIdParam));
-      if (requested) selectedTerm = requested;
+      if (requested) selectedTerm = requested as any;
     }
 
     const divisionIds: number[] = [];
@@ -50,35 +50,35 @@ export async function GET(req: Request) {
 
     const courseStats = await Promise.all(
       uniqueCourses.map(async ({ course, divisionId }) => {
-        const sessions = await prisma.session.findMany({
-          where: { courseId: course.id, divisionId },
+        const timetableSlots = await prisma.timetable.findMany({
+          where: { courseId: course.id, divisionId, isConducted: true },
           orderBy: { date: "asc" },
         });
-        const sessionIds = sessions.map(s => s.id);
+        const timetableIds = timetableSlots.map(t => t.id);
         const attendance = await prisma.attendance.findMany({
-          where: { studentId: student.id, sessionId: { in: sessionIds } },
+          where: { studentId: student.id, timetableId: { in: timetableIds } },
         });
 
-        const attendanceMap = new Map(attendance.map(a => [a.sessionId, a]));
+        const attendanceMap = new Map(attendance.map(a => [a.timetableId, a]));
 
         const present = attendance.filter(a => a.status === "P").length;
         const absent = attendance.filter(a => a.status === "AB").length;
         const late = attendance.filter(a => a.status === "LT").length;
         const pLeave = attendance.filter(a => a.status === "P#").length;
-        const totalConducted = sessions.length;
+        const totalConducted = timetableSlots.length;
         const percentage = totalConducted > 0 ? Math.round(((present + late) / totalConducted) * 100) : 100;
 
         const penalty = getPenaltyInfo(course.credits, absent, late);
         const thresholds = PENALTY_THRESHOLDS[course.credits] || PENALTY_THRESHOLDS[3];
 
-        // Attendance log per session
-        const log = sessions.map(s => {
-          const record = attendanceMap.get(s.id);
+        // Attendance log per timetable slot
+        const log = timetableSlots.map(t => {
+          const record = attendanceMap.get(t.id);
           return {
-            sessionId: s.id,
-            sessionNumber: s.sessionNumber,
-            date: s.date,
-            slot: s.slotNumber,
+            sessionId: t.id, // mapped for backwards frontend compat
+            sessionNumber: t.sessionNumber,
+            date: t.date,
+            slot: t.slotNumber,
             status: record?.status || "—",
             swipeTime: record?.swipeTime || null,
           };
@@ -108,7 +108,7 @@ export async function GET(req: Request) {
         specDivision: student.specDivision?.name, activeTerm: selectedTerm?.name || null,
       },
       courses: courseStats,
-      terms: allTerms.map(t => ({ id: t.id, number: t.number, name: t.name, isActive: t.isActive })),
+      terms: allTerms.map(t => ({ id: t.id, number: t.number, name: t.name, isActive: t.id === student.batch?.activeTermId })),
       selectedTermId: selectedTerm?.id || null,
     });
   } catch (error) {

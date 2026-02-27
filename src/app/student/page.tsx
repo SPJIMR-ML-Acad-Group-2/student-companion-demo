@@ -1,7 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+
+const C = {
+  card:    "var(--color-bg-card)",
+  sec:     "var(--color-bg-secondary)",
+  border:  "var(--color-border)",
+  text:    "var(--color-text-primary)",
+  muted:   "var(--color-text-muted)",
+  sub:     "var(--color-text-secondary)",
+  accentS: "var(--color-accent-sec)",
+  success: "var(--color-success)",
+  warning: "var(--color-warning)",
+  danger:  "var(--color-danger)",
+};
 
 interface PenaltyInfo { level: string; label: string; description: string; thresholds: { L1: number; L2: number; L3: number }; effectiveAbsences: number; }
 interface LogEntry { sessionId: number; sessionNumber: number | null; date: string; slot: number; status: string; swipeTime: string | null; }
@@ -18,24 +30,28 @@ interface StudentData {
 }
 
 function ProgressRing({ percentage, size = 72 }: { percentage: number; size?: number }) {
-  const strokeWidth = 6; const radius = (size - strokeWidth) / 2; const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percentage / 100) * circumference;
-  const color = percentage >= 85 ? "var(--success)" : percentage >= 75 ? "var(--warning)" : "var(--danger)";
+  const sw = 6, r = (size - sw) / 2, circ = 2 * Math.PI * r;
+  const offset = circ - (percentage / 100) * circ;
+  const color = percentage >= 85 ? C.success : percentage >= 75 ? C.warning : C.danger;
   return (
-    <div className="progress-ring" style={{ width: size, height: size }}>
-      <svg width={size} height={size}><circle className="ring-bg" cx={size / 2} cy={size / 2} r={radius} /><circle className="ring-fill" cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeDasharray={circumference} strokeDashoffset={offset} /></svg>
-      <span className="progress-ring-text" style={{ color }}>{percentage}%</span>
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={sw} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={sw}
+          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset} />
+      </svg>
+      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.22, fontWeight: 700, color }}>
+        {percentage}%
+      </span>
     </div>
   );
 }
 
 export default function StudentDashboard() {
-  const [data, setData] = useState<StudentData | null>(null);
-  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData]               = useState<StudentData | null>(null);
+  const [loading, setLoading]         = useState(true);
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
   const [expandedCourse, setExpandedCourse] = useState<number | null>(null);
-  const router = useRouter();
 
   const fetchData = async (termId?: number | null) => {
     const url = termId ? `/api/dashboard/student?termId=${termId}` : "/api/dashboard/student";
@@ -43,173 +59,220 @@ export default function StudentDashboard() {
     if (res.ok) { const d = await res.json(); setData(d); setSelectedTermId(d.selectedTermId); }
   };
 
-  useEffect(() => {
-    (async () => {
-      const meRes = await fetch("/api/auth/me"); if (!meRes.ok) { router.push("/"); return; }
-      const meData = await meRes.json(); if (meData.user?.role !== "student") { router.push("/"); return; }
-      setUser(meData.user); await fetchData(); setLoading(false);
-    })();
-  }, [router]);
+  useEffect(() => { fetchData().then(() => setLoading(false)); }, []);
 
   const handleTermChange = async (termId: string) => {
-    const id = parseInt(termId);
-    setSelectedTermId(id); setExpandedCourse(null);
+    const id = parseInt(termId); setSelectedTermId(id); setExpandedCourse(null);
     await fetchData(id);
   };
 
-  const handleLogout = async () => { await fetch("/api/auth/me", { method: "DELETE" }); router.push("/"); };
-  if (loading) return <div className="login-container"><div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} /></div>;
-  if (!data || !user) return null;
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="rounded-full border-2 animate-spin" style={{ width: 40, height: 40, borderColor: "rgba(255,255,255,0.3)", borderTopColor: "white" }} />
+      </div>
+    );
+  }
 
   const coreCourses = data.courses.filter(c => c.courseType === "core");
   const specCourses = data.courses.filter(c => c.courseType === "specialisation");
-  const totalPresent = data.courses.reduce((s, c) => s + c.present, 0);
-  const totalAbsent = data.courses.reduce((s, c) => s + c.absent, 0);
-  const totalLate = data.courses.reduce((s, c) => s + c.late, 0);
+  const totalPresent  = data.courses.reduce((s, c) => s + c.present, 0);
+  const totalAbsent   = data.courses.reduce((s, c) => s + c.absent, 0);
+  const totalLate     = data.courses.reduce((s, c) => s + c.late, 0);
   const totalSessions = data.courses.reduce((s, c) => s + c.totalConducted, 0);
-  const overallPct = totalSessions > 0 ? Math.round(((totalPresent + totalLate) / totalSessions) * 100) : 100;
+  const overallPct    = totalSessions > 0 ? Math.round(((totalPresent + totalLate) / totalSessions) * 100) : 100;
 
   return (
-    <div className="dashboard-layout">
-      <aside className="sidebar">
-        <div className="sidebar-brand"><div className="sidebar-brand-icon">📚</div><h2>Companion</h2></div>
-        <nav className="sidebar-nav">
-          <div className="sidebar-link active"><span className="sidebar-link-icon">📊</span> Attendance</div>
-          <a className="sidebar-link" href="/student/calendar"><span className="sidebar-link-icon">📅</span> Calendar</a>
-        </nav>
-        <div className="sidebar-user"><div className="sidebar-avatar">{user.name[0]}</div>
-          <div className="sidebar-user-info"><div className="sidebar-user-name">{user.name}</div><div className="sidebar-user-role">Student</div></div>
-          <button className="quick-btn" onClick={handleLogout} style={{ padding: "6px 10px", fontSize: "11px" }}>↩</button></div>
-      </aside>
-      <main className="main-content">
-        <div className="page-header">
-          <h1 className="page-title">Welcome, {data.student.name.split(" ")[0]} 👋</h1>
-          <p className="page-description">
-            {data.student.rollNumber} · {data.student.programme} · Div {data.student.coreDivision}
-            {data.student.specialisation && <> · {data.student.specialisation} ({data.student.specDivision})</>}
-          </p>
-        </div>
+    <div className="relative z-[1]">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-1" style={{ color: C.text }}>
+          Welcome, {data.student.name.split(" ")[0]} 👋
+        </h1>
+        <p className="text-sm" style={{ color: C.sub }}>
+          {data.student.rollNumber} · {data.student.programme} · Div {data.student.coreDivision}
+          {data.student.specialisation && <> · {data.student.specialisation} ({data.student.specDivision})</>}
+        </p>
+      </div>
 
-        {/* Term Selector */}
-        {data.terms.length > 0 && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}>
-            <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>Term:</span>
-            {data.terms.map(t => (
-              <button key={t.id} onClick={() => handleTermChange(t.id.toString())}
-                className={`badge badge-${selectedTermId === t.id ? "success" : "warning"}`}
-                style={{ cursor: "pointer", border: "none", fontFamily: "inherit", fontSize: 13, padding: "6px 14px" }}>
-                {t.name} {t.isActive ? "●" : ""}
-              </button>
+      {/* Term Selector */}
+      {data.terms.length > 0 && (
+        <div className="flex gap-2 items-center mb-6">
+          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>Term:</span>
+          {data.terms.map(t => (
+            <button key={t.id} onClick={() => handleTermChange(t.id.toString())}
+              className={selectedTermId === t.id ? "badge-success" : "badge-warning"}
+              style={{ cursor: "pointer", border: "none", fontFamily: "inherit", fontSize: 13, padding: "5px 14px" }}>
+              {t.name}{t.isActive ? " ●" : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Stats */}
+      <div className="grid gap-3 mb-8" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
+        {[
+          { label: "Overall",  value: `${overallPct}%`, color: overallPct >= 85 ? C.success : overallPct >= 75 ? C.warning : C.danger, sub: `${totalPresent + totalLate}/${totalSessions}` },
+          { label: "Present",  value: totalPresent,  color: C.success },
+          { label: "Late",     value: totalLate,     color: C.warning },
+          { label: "Absent",   value: totalAbsent,   color: C.danger  },
+        ].map(({ label, value, color, sub }) => (
+          <div key={label} className="rounded-2xl p-5 border" style={{ background: C.card, borderColor: C.border }}>
+            <div className="text-xs uppercase tracking-widest mb-2" style={{ color: C.muted }}>{label}</div>
+            <div className="text-3xl font-bold" style={{ color }}>{value}</div>
+            {sub && <div className="text-xs mt-1" style={{ color: C.sub }}>{sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* Core Courses */}
+      {coreCourses.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-base font-semibold mb-3" style={{ color: C.sub }}>Core Courses</h2>
+          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))" }}>
+            {coreCourses.map((c, i) => (
+              <CourseCard key={c.courseId} course={c} delay={i * 0.08}
+                expanded={expandedCourse === c.courseId}
+                onToggle={() => setExpandedCourse(expandedCourse === c.courseId ? null : c.courseId)} />
             ))}
           </div>
-        )}
-
-        <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Overall</div>
-            <div className="stat-value" style={{ color: overallPct >= 85 ? "var(--success)" : overallPct >= 75 ? "var(--warning)" : "var(--danger)" }}>{overallPct}%</div>
-            <div className="stat-subtext">{totalPresent + totalLate}/{totalSessions}</div></div>
-          <div className="stat-card"><div className="stat-label">Present</div><div className="stat-value" style={{ color: "var(--success)" }}>{totalPresent}</div></div>
-          <div className="stat-card"><div className="stat-label">Late</div><div className="stat-value" style={{ color: "var(--warning)" }}>{totalLate}</div></div>
-          <div className="stat-card"><div className="stat-label">Absent</div><div className="stat-value" style={{ color: "var(--danger)" }}>{totalAbsent}</div></div>
         </div>
+      )}
 
-        {coreCourses.length > 0 && (
-          <><div className="section-header"><h2 className="section-title">Core Courses</h2></div>
-          <div className="attendance-grid">{coreCourses.map((c, i) => (
-            <CourseCard key={c.courseId} course={c} delay={i * 0.1} expanded={expandedCourse === c.courseId} onToggle={() => setExpandedCourse(expandedCourse === c.courseId ? null : c.courseId)} />
-          ))}</div></>
-        )}
-        {specCourses.length > 0 && (
-          <><div className="section-header" style={{ marginTop: 24 }}><h2 className="section-title">Specialisation Courses</h2></div>
-          <div className="attendance-grid">{specCourses.map((c, i) => (
-            <CourseCard key={c.courseId} course={c} delay={(coreCourses.length + i) * 0.1} expanded={expandedCourse === c.courseId} onToggle={() => setExpandedCourse(expandedCourse === c.courseId ? null : c.courseId)} />
-          ))}</div></>
-        )}
-        {data.courses.length === 0 && (
-          <div style={{ textAlign: "center", padding: "60px", color: "var(--text-muted)" }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div><p>No courses for this term.</p>
+      {/* Spec Courses */}
+      {specCourses.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-base font-semibold mb-3" style={{ color: C.sub }}>Specialisation Courses</h2>
+          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))" }}>
+            {specCourses.map((c, i) => (
+              <CourseCard key={c.courseId} course={c} delay={(coreCourses.length + i) * 0.08}
+                expanded={expandedCourse === c.courseId}
+                onToggle={() => setExpandedCourse(expandedCourse === c.courseId ? null : c.courseId)} />
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Penalty Table */}
-        <div className="division-card" style={{ marginTop: 32 }}>
-          <h3 style={{ fontSize: 14, marginBottom: 12, color: "var(--text-secondary)" }}>📜 Absenteeism Penalty Table (2 Lates = 1 Absence)</h3>
-          <table className="data-table">
+      {data.courses.length === 0 && (
+        <div className="text-center py-16" style={{ color: C.muted }}>
+          <div className="text-5xl mb-4">📋</div>
+          <p className="text-sm">No courses for this term.</p>
+        </div>
+      )}
+
+      {/* Penalty Reference */}
+      <div className="rounded-2xl border p-5 mt-4" style={{ background: C.card, borderColor: C.border }}>
+        <h3 className="text-sm font-semibold mb-3" style={{ color: C.sub }}>
+          📜 Absenteeism Penalty Reference &nbsp;·&nbsp; <span style={{ fontWeight: 400 }}>2 Lates = 1 Effective Absence</span>
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="tw-table">
             <thead><tr><th>Credits</th><th>Sessions</th><th>L1 (1-level ↓)</th><th>L2 (2-level ↓)</th><th>L3 (F grade)</th></tr></thead>
             <tbody>
-              <tr><td>1</td><td>9</td><td>2</td><td>4</td><td>5</td></tr>
-              <tr><td>2</td><td>18</td><td>4</td><td>6</td><td>8</td></tr>
-              <tr><td>3</td><td>26</td><td>5</td><td>6</td><td>8</td></tr>
-              <tr><td>4</td><td>35</td><td>5</td><td>7</td><td>9</td></tr>
+              <tr><td style={{ color: C.text }}>1</td><td style={{ color: C.sub }}>9</td><td style={{ color: C.warning }}>2</td><td style={{ color: C.warning }}>4</td><td style={{ color: C.danger }}>5</td></tr>
+              <tr><td style={{ color: C.text }}>2</td><td style={{ color: C.sub }}>18</td><td style={{ color: C.warning }}>4</td><td style={{ color: C.warning }}>6</td><td style={{ color: C.danger }}>8</td></tr>
+              <tr><td style={{ color: C.text }}>3</td><td style={{ color: C.sub }}>26</td><td style={{ color: C.warning }}>5</td><td style={{ color: C.warning }}>6</td><td style={{ color: C.danger }}>8</td></tr>
+              <tr><td style={{ color: C.text }}>4</td><td style={{ color: C.sub }}>35</td><td style={{ color: C.warning }}>5</td><td style={{ color: C.warning }}>7</td><td style={{ color: C.danger }}>9</td></tr>
             </tbody>
           </table>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>L1 = 1-level downgrade (A+→A) · L2 = 1-letter downgrade (A→B) · L3 = F grade. 2 Lates = 1 Absence for penalty calculation.</div>
         </div>
-      </main>
+        <p className="text-xs mt-2" style={{ color: C.muted }}>
+          L1 = 1-level downgrade (A+→A) · L2 = 1-letter downgrade (A→B) · L3 = F grade
+        </p>
+      </div>
     </div>
   );
 }
 
-function CourseCard({ course, delay, expanded, onToggle }: { course: CourseStats; delay: number; expanded: boolean; onToggle: () => void }) {
-  const penalty = course.penalty;
-  const penaltyBadge = penalty.level === "none" ? "success" : penalty.level === "L1" ? "warning" : "danger";
-  const penaltyColor = penalty.level === "none" ? "var(--success)" : penalty.level === "L1" ? "var(--warning)" : "var(--danger)";
+function CourseCard({ course, delay, expanded, onToggle }: {
+  course: CourseStats; delay: number; expanded: boolean; onToggle: () => void;
+}) {
+  const p      = course.penalty;
+  const badge  = p.level === "none" ? "badge-success" : p.level === "L1" ? "badge-warning" : "badge-danger";
+  const pColor = p.level === "none" ? C.success : p.level === "L1" ? C.warning : C.danger;
+
   return (
-    <div className="attendance-card" style={{ animationDelay: `${delay}s` }}>
-      <div className="attendance-card-header">
-        <div>
-          <div className="attendance-course-code">
-            {course.courseCode}
-            <span className={`badge badge-${course.courseType === "core" ? "success" : "warning"}`} style={{ fontSize: 10, marginLeft: 4 }}>{course.courseType}</span>
-            <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 4 }}>{course.credits}cr</span>
+    <div className="rounded-2xl border p-5" style={{ background: C.card, borderColor: C.border, animationDelay: `${delay}s` }}>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1 min-w-0 mr-4">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="text-sm font-bold" style={{ color: C.text }}>{course.courseCode}</span>
+            <span className={course.courseType === "core" ? "badge-success" : "badge-warning"} style={{ fontSize: 10 }}>{course.courseType}</span>
+            <span className="text-[11px]" style={{ color: C.muted }}>{course.credits}cr</span>
           </div>
-          <div className="attendance-course-name">{course.courseName}</div>
-          <span className={`badge badge-${penaltyBadge}`} style={{ marginTop: 8, display: "inline-flex" }}>
-            {penalty.level === "none" ? "● No Penalty" : `⚠ ${penalty.label}`}
+          <div className="text-xs mb-3" style={{ color: C.sub }}>{course.courseName}</div>
+          <span className={badge}>
+            {p.level === "none" ? "● No Penalty" : `⚠ ${p.label}`}
           </span>
         </div>
         <ProgressRing percentage={course.percentage} />
       </div>
-      <div className="attendance-details">
-        <div className="attendance-detail"><div className="attendance-detail-value detail-present">{course.present}</div><div className="attendance-detail-label">Present</div></div>
-        <div className="attendance-detail"><div className="attendance-detail-value detail-absent">{course.absent}</div><div className="attendance-detail-label">Absent</div></div>
-        <div className="attendance-detail"><div className="attendance-detail-value detail-late">{course.late}</div><div className="attendance-detail-label">Late</div></div>
-        <div className="attendance-detail"><div className="attendance-detail-value" style={{ color: "var(--accent-secondary)" }}>{course.pLeave}</div><div className="attendance-detail-label">P# Leave</div></div>
-      </div>
-      <div style={{ padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 8, fontSize: 12, color: penaltyColor, marginTop: 8 }}>
-        {penalty.level === "none" ? `${Math.max(0, penalty.thresholds.L1 - penalty.effectiveAbsences)} more eff. absences before L1 penalty` : penalty.description}
-      </div>
-      <div style={{ display: "flex", gap: 4, marginTop: 8, fontSize: 11, color: "var(--text-muted)" }}>
-        <span>Eff. Absences: {penalty.effectiveAbsences}</span><span style={{ flex: 1 }} />
-        <span style={{ color: penalty.effectiveAbsences >= penalty.thresholds.L1 ? "var(--warning)" : undefined }}>L1: {penalty.thresholds.L1}</span>
-        <span style={{ color: penalty.effectiveAbsences >= penalty.thresholds.L2 ? "var(--danger)" : undefined }}>L2: {penalty.thresholds.L2}</span>
-        <span style={{ color: penalty.effectiveAbsences >= penalty.thresholds.L3 ? "var(--danger)" : undefined }}>L3: {penalty.thresholds.L3}</span>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-4 gap-2 mb-3">
+        {[
+          { label: "Present",  value: course.present, color: C.success },
+          { label: "Absent",   value: course.absent,  color: C.danger  },
+          { label: "Late",     value: course.late,    color: C.warning },
+          { label: "P# Leave", value: course.pLeave,  color: C.accentS },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="rounded-lg p-2 text-center" style={{ background: C.sec }}>
+            <div className="text-xl font-bold" style={{ color }}>{value}</div>
+            <div className="text-[10px] mt-0.5" style={{ color: C.muted }}>{label}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Attendance Log Toggle */}
-      <button onClick={onToggle} style={{
-        marginTop: 12, padding: "8px 0", width: "100%", background: "none", border: "none",
-        color: "var(--accent-secondary)", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: 600,
-      }}>{expanded ? "▲ Hide Log" : "▼ View Attendance Log"}</button>
+      {/* Penalty summary */}
+      <div className="rounded-lg px-3 py-2 text-xs mb-2" style={{ background: C.sec, color: pColor }}>
+        {p.level === "none"
+          ? `${Math.max(0, p.thresholds.L1 - p.effectiveAbsences)} more eff. absences before L1 penalty`
+          : p.description}
+      </div>
 
-      {expanded && course.log.length > 0 && (
-        <div style={{ marginTop: 4, maxHeight: 300, overflowY: "auto" }}>
-          <table className="data-table" style={{ fontSize: 12 }}>
-            <thead><tr><th>Date</th><th>Slot</th><th>Status</th><th>Swipe Time</th></tr></thead>
-            <tbody>{course.log.map(l => (
-              <tr key={l.sessionId}>
-                <td>{l.date}</td><td>Slot {l.slot}</td>
-                <td><span className={`badge badge-${l.status === "P" ? "success" : l.status === "LT" ? "warning" : l.status === "AB" ? "danger" : "warning"}`} style={{ fontSize: 11 }}>
-                  {l.status === "P" ? "Present" : l.status === "AB" ? "Absent" : l.status === "LT" ? "Late" : l.status}
-                </span></td>
-                <td style={{ color: "var(--text-muted)" }}>{l.swipeTime || "—"}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+      {/* Thresholds */}
+      <div className="flex gap-3 text-[11px] mb-1" style={{ color: C.muted }}>
+        <span>Eff. Absences: <strong style={{ color: C.text }}>{p.effectiveAbsences}</strong></span>
+        <span className="flex-1" />
+        <span style={{ color: p.effectiveAbsences >= p.thresholds.L1 ? C.warning : undefined }}>L1: {p.thresholds.L1}</span>
+        <span style={{ color: p.effectiveAbsences >= p.thresholds.L2 ? C.danger  : undefined }}>L2: {p.thresholds.L2}</span>
+        <span style={{ color: p.effectiveAbsences >= p.thresholds.L3 ? C.danger  : undefined }}>L3: {p.thresholds.L3}</span>
+      </div>
+
+      {/* Log toggle */}
+      <button onClick={onToggle}
+        className="w-full py-2 text-xs font-semibold cursor-pointer transition-colors"
+        style={{ marginTop: 8, background: "none", border: "none", color: C.accentS, fontFamily: "inherit" }}>
+        {expanded ? "▲ Hide Log" : "▼ View Attendance Log"}
+      </button>
+
+      {/* Log table */}
+      {expanded && (
+        <div style={{ marginTop: 4, maxHeight: 280, overflowY: "auto" }}>
+          {course.log.length === 0
+            ? <p className="text-xs text-center py-4" style={{ color: C.muted }}>No sessions yet</p>
+            : (
+              <table className="tw-table" style={{ fontSize: 12 }}>
+                <thead><tr><th>Date</th><th>Slot</th><th>Status</th><th>Swipe</th></tr></thead>
+                <tbody>
+                  {course.log.map(l => (
+                    <tr key={l.sessionId}>
+                      <td style={{ color: C.text }}>{l.date}</td>
+                      <td style={{ color: C.sub }}>Slot {l.slot}</td>
+                      <td>
+                        <span className={l.status === "P" ? "badge-success" : l.status === "AB" ? "badge-danger" : "badge-warning"} style={{ fontSize: 11 }}>
+                          {l.status === "P" ? "Present" : l.status === "AB" ? "Absent" : l.status === "LT" ? "Late" : l.status}
+                        </span>
+                      </td>
+                      <td style={{ color: C.muted }}>{l.swipeTime || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          }
         </div>
-      )}
-      {expanded && course.log.length === 0 && (
-        <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: 12, padding: 12 }}>No sessions yet</p>
       )}
     </div>
   );

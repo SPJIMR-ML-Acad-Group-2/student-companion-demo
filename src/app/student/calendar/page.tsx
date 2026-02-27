@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
 
 const FIXED_SLOTS = [
-  { slot: 1, label: "8:15–9:00" }, { slot: 2, label: "9:00–10:10" },
-  { slot: 3, label: "10:40–11:50" }, { slot: 4, label: "12:10–1:20" },
-  { slot: 5, label: "2:30–3:40" }, { slot: 6, label: "4:00–5:10" },
-  { slot: 7, label: "5:30–6:40" }, { slot: 8, label: "7:00–8:10" },
+  { slot: 1, label: "8:15–9:00"   }, { slot: 2, label: "9:00–10:10"  },
+  { slot: 3, label: "10:40–11:50" }, { slot: 4, label: "12:10–1:20"  },
+  { slot: 5, label: "2:30–3:40"   }, { slot: 6, label: "4:00–5:10"   },
+  { slot: 7, label: "5:30–6:40"   }, { slot: 8, label: "7:00–8:10"   },
 ];
 
 interface CalendarSlot {
@@ -20,124 +19,148 @@ interface CalendarSlot {
 interface CalendarDay { date: string; dayOfWeek: number; dayName: string; slots: CalendarSlot[]; }
 interface CalendarData { weekOf: string; weekEnd: string; weekDates: string[]; calendar: CalendarDay[]; divisions: Array<{ id: number; name: string }>; }
 
+const C = {
+  card:    "var(--color-bg-card)",
+  sec:     "var(--color-bg-secondary)",
+  border:  "var(--color-border)",
+  text:    "var(--color-text-primary)",
+  muted:   "var(--color-text-muted)",
+  sub:     "var(--color-text-secondary)",
+  accent:  "var(--color-accent)",
+  accentS: "var(--color-accent-sec)",
+  accentG: "var(--color-accent-glow)",
+  success: "var(--color-success)",
+  warning: "var(--color-warning)",
+  danger:  "var(--color-danger)",
+};
+
 export default function StudentCalendar() {
-  const [data, setData] = useState<CalendarData | null>(null);
-  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [data, setData]           = useState<CalendarData | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [loading, setLoading]     = useState(true);
 
   const fetchCalendar = async (offset: number) => {
-    const refDate = new Date();
-    refDate.setDate(refDate.getDate() + offset * 7);
-    const weekOf = refDate.toISOString().split("T")[0];
-    const res = await fetch(`/api/calendar?role=student&weekOf=${weekOf}`);
+    const ref = new Date();
+    ref.setDate(ref.getDate() + offset * 7);
+    const res = await fetch(`/api/calendar?role=student&weekOf=${ref.toISOString().split("T")[0]}`);
     if (res.ok) setData(await res.json());
   };
 
-  useEffect(() => {
-    (async () => {
-      const meRes = await fetch("/api/auth/me"); if (!meRes.ok) { router.push("/"); return; }
-      const meData = await meRes.json(); if (meData.user?.role !== "student") { router.push("/"); return; }
-      setUser(meData.user); await fetchCalendar(0); setLoading(false);
-    })();
-  }, [router]);
+  useEffect(() => { fetchCalendar(0).then(() => setLoading(false)); }, []);
 
-  const handleWeekChange = (dir: number) => { const next = weekOffset + dir; setWeekOffset(next); fetchCalendar(next); };
-  const handleLogout = async () => { await fetch("/api/auth/me", { method: "DELETE" }); router.push("/"); };
+  const handleWeekChange = (dir: number) => { const n = weekOffset + dir; setWeekOffset(n); fetchCalendar(n); };
 
-  if (loading) return <div className="login-container"><div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} /></div>;
-  if (!data || !user) return null;
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="rounded-full border-2 animate-spin" style={{ width: 40, height: 40, borderColor: "rgba(255,255,255,0.3)", borderTopColor: "white" }} />
+      </div>
+    );
+  }
 
   const today = new Date().toISOString().split("T")[0];
 
   return (
-    <div className="dashboard-layout">
-      <aside className="sidebar">
-        <div className="sidebar-brand"><div className="sidebar-brand-icon">📚</div><h2>Companion</h2></div>
-        <nav className="sidebar-nav">
-          <a className="sidebar-link" href="/student"><span className="sidebar-link-icon">📊</span> Attendance</a>
-          <div className="sidebar-link active"><span className="sidebar-link-icon">📅</span> Calendar</div>
-        </nav>
-        <div className="sidebar-user"><div className="sidebar-avatar">{user.name[0]}</div>
-          <div className="sidebar-user-info"><div className="sidebar-user-name">{user.name}</div><div className="sidebar-user-role">Student</div></div>
-          <button className="quick-btn" onClick={handleLogout} style={{ padding: "6px 10px", fontSize: "11px" }}>↩</button></div>
-      </aside>
-      <main className="main-content">
-        <div className="page-header">
-          <h1 className="page-title">📅 My Schedule</h1>
-          <p className="page-description">Weekly timetable with attendance status</p>
-        </div>
-        {/* Week navigation */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <button className="quick-btn" onClick={() => handleWeekChange(-1)}>◀ Prev</button>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-            {formatDate(data.weekOf)} — {formatDate(data.weekEnd)}
-          </span>
-          <button className="quick-btn" onClick={() => handleWeekChange(1)}>Next ▶</button>
-          {weekOffset !== 0 && <button className="quick-btn" onClick={() => { setWeekOffset(0); fetchCalendar(0); }}>Today</button>}
-        </div>
-        {/* Calendar grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "80px repeat(6, 1fr)", gap: 2, fontSize: 12 }}>
-          {/* Header row */}
-          <div style={{ padding: 8, fontWeight: 700, color: "var(--text-muted)" }}>Slot</div>
-          {data.calendar.map(day => (
-            <div key={day.date} style={{
-              padding: 8, fontWeight: 700, textAlign: "center",
-              color: day.date === today ? "var(--accent-secondary)" : "var(--text-primary)",
-              background: day.date === today ? "var(--accent-glow)" : "transparent",
-              borderRadius: 6,
-            }}>
-              {day.dayName}<br /><span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>{day.date.slice(5)}</span>
+    <div className="relative z-[1]">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-1" style={{ color: C.text }}>📅 My Schedule</h1>
+        <p className="text-sm" style={{ color: C.sub }}>Weekly timetable with your attendance status</p>
+      </div>
+
+      {/* Week nav */}
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <button onClick={() => handleWeekChange(-1)}
+          className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
+          style={{ background: C.sec, border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>◀ Prev</button>
+        <span className="text-sm font-semibold" style={{ color: C.text }}>
+          {fmtDate(data.weekOf)} — {fmtDate(data.weekEnd)}
+        </span>
+        <button onClick={() => handleWeekChange(1)}
+          className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
+          style={{ background: C.sec, border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>Next ▶</button>
+        {weekOffset !== 0 && (
+          <button onClick={() => { setWeekOffset(0); fetchCalendar(0); }}
+            className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
+            style={{ background: C.sec, border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>Today</button>
+        )}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="text-xs overflow-x-auto" style={{ display: "grid", gridTemplateColumns: "80px repeat(6,1fr)", gap: 2 }}>
+        {/* Column headers */}
+        <div className="p-2 font-bold" style={{ color: C.muted }}>Slot</div>
+        {data.calendar.map(day => (
+          <div key={day.date} className="p-2 font-bold text-center rounded"
+            style={{ color: day.date === today ? C.accentS : C.text, background: day.date === today ? C.accentG : "transparent" }}>
+            {day.dayName}<br />
+            <span className="font-normal" style={{ fontSize: 11, color: C.muted }}>{day.date.slice(5)}</span>
+          </div>
+        ))}
+
+        {/* Slot rows */}
+        {FIXED_SLOTS.map(slotDef => (
+          <React.Fragment key={slotDef.slot}>
+            <div className="flex flex-col justify-center"
+              style={{ padding: "10px 6px", borderTop: `1px solid ${C.border}`, color: C.muted }}>
+              <div className="font-semibold">S{slotDef.slot}</div>
+              <div>{slotDef.label}</div>
             </div>
-          ))}
-          {/* Slot rows */}
-          {FIXED_SLOTS.map(slotDef => (
-            <>
-              <div key={`label-${slotDef.slot}`} style={{
-                padding: "10px 6px", fontSize: 11, color: "var(--text-muted)", borderTop: "1px solid var(--border-primary)",
-                display: "flex", flexDirection: "column", justifyContent: "center",
-              }}>
-                <div style={{ fontWeight: 600 }}>S{slotDef.slot}</div>
-                <div>{slotDef.label}</div>
-              </div>
-              {data.calendar.map(day => {
-                const entry = day.slots.find(s => s.slotNumber === slotDef.slot);
-                if (!entry) return <div key={`${day.date}-${slotDef.slot}`} style={{ padding: 6, borderTop: "1px solid var(--border-primary)" }} />;
-                const att = entry.attendance?.[0];
-                const statusColor = !att ? "var(--text-muted)" : att.status === "P" ? "var(--success)" : att.status === "AB" ? "var(--danger)" : att.status === "P#" ? "#3b82f6" : "var(--warning)";
-                const statusLabel = !att ? (entry.hasSession ? (entry.noSwipes ? "⚠ No Swipes" : "—") : "") : att.status === "P" ? "✓ Present" : att.status === "AB" ? "✗ Absent" : att.status === "P#" ? "🛡️ Leave" : `⏱ ${att.status}`;
-                return (
-                  <div key={`${day.date}-${slotDef.slot}`} style={{
-                    padding: 8, borderTop: "1px solid var(--border-primary)",
-                    background: entry.hasSession ? (att?.status === "P" ? "rgba(76,175,80,0.08)" : att?.status === "AB" ? "rgba(244,67,54,0.08)" : att?.status === "P#" ? "rgba(59,130,246,0.08)" : "var(--bg-tertiary)") : "var(--bg-tertiary)",
-                    borderRadius: 4, borderLeft: `3px solid ${entry.courseType === "core" ? "var(--accent-primary)" : "var(--warning)"}`,
-                  }}>
-                    <div style={{ fontWeight: 700, color: "var(--text-primary)" }}>{entry.courseCode} {entry.sessionNumber && <span style={{ fontSize: 10, fontWeight: "normal", color: "var(--text-muted)", float: "right" }}>S{entry.sessionNumber}</span>}</div>
-                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{entry.courseName}</div>
-                    {entry.facultyName && <div style={{ fontSize: 10, color: "var(--accent-secondary)", marginTop: 2 }}>{entry.facultyName}</div>}
-                    {entry.hasSession && <div style={{ fontSize: 10, fontWeight: 600, color: statusColor, marginTop: 4 }}>{statusLabel}</div>}
+            {data.calendar.map(day => {
+              const entry = day.slots.find(s => s.slotNumber === slotDef.slot);
+              if (!entry) {
+                return <div key={`${day.date}-${slotDef.slot}`} style={{ padding: 6, borderTop: `1px solid ${C.border}` }} />;
+              }
+              const att = entry.attendance?.[0];
+              const statusColor =
+                !att          ? C.muted :
+                att.status === "P"  ? C.success :
+                att.status === "AB" ? C.danger :
+                att.status === "P#" ? "#3b82f6" : C.warning;
+              const statusLabel =
+                !att          ? (entry.hasSession ? (entry.noSwipes ? "⚠ No Swipes" : "—") : "") :
+                att.status === "P"  ? "✓ Present" :
+                att.status === "AB" ? "✗ Absent"  :
+                att.status === "P#" ? "🛡 Leave"  : `⏱ ${att.status}`;
+              const bgColor =
+                att?.status === "P"  ? "rgba(34,197,94,0.07)"  :
+                att?.status === "AB" ? "rgba(239,68,68,0.07)"  :
+                att?.status === "P#" ? "rgba(59,130,246,0.07)" : C.sec;
+
+              return (
+                <div key={`${day.date}-${slotDef.slot}`}
+                  style={{ padding: 8, borderTop: `1px solid ${C.border}`, borderRadius: 4,
+                    background: entry.hasSession ? bgColor : C.sec,
+                    borderLeft: `3px solid ${entry.courseType === "core" ? C.accent : C.warning}` }}>
+                  <div className="font-bold" style={{ color: C.text }}>
+                    {entry.courseCode}
+                    {entry.sessionNumber && <span className="font-normal float-right" style={{ fontSize: 9, color: C.muted }}>S{entry.sessionNumber}</span>}
                   </div>
-                );
-              })}
-            </>
-          ))}
-        </div>
-        {/* Legend */}
-        <div style={{ display: "flex", gap: 16, marginTop: 20, fontSize: 12, color: "var(--text-muted)" }}>
-          <span><span style={{ display: "inline-block", width: 12, height: 12, borderRadius: 2, background: "var(--accent-primary)", marginRight: 4, verticalAlign: "middle" }} /> Core</span>
-          <span><span style={{ display: "inline-block", width: 12, height: 12, borderRadius: 2, background: "var(--warning)", marginRight: 4, verticalAlign: "middle" }} /> Specialisation</span>
-          <span style={{ color: "var(--success)" }}>✓ Present</span>
-          <span style={{ color: "var(--danger)" }}>✗ Absent</span>
-          <span style={{ color: "var(--warning)" }}>⏱ Late</span>
-          <span style={{ color: "#3b82f6" }}>🛡️ Leave</span>
-        </div>
-      </main>
+                  <div className="truncate" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{entry.courseName}</div>
+                  {entry.facultyName && <div style={{ fontSize: 10, color: C.accentS, marginTop: 2 }}>{entry.facultyName}</div>}
+                  {entry.hasSession && (
+                    <div style={{ fontSize: 10, fontWeight: 600, color: statusColor, marginTop: 4 }}>{statusLabel}</div>
+                  )}
+                </div>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 mt-5 text-xs flex-wrap" style={{ color: C.muted }}>
+        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle" style={{ background: C.accent }} /> Core</span>
+        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle" style={{ background: C.warning }} /> Specialisation</span>
+        <span style={{ color: C.success }}>✓ Present</span>
+        <span style={{ color: C.danger }}>✗ Absent</span>
+        <span style={{ color: C.warning }}>⏱ Late</span>
+        <span style={{ color: "#3b82f6" }}>🛡 Leave</span>
+      </div>
     </div>
   );
 }
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+function fmtDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
