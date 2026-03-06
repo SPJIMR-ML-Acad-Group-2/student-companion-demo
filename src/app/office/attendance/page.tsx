@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 
 function parseCSVPreview(text: string): string[][] {
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
@@ -20,25 +23,11 @@ interface CalendarSlot {
   divisionName: string; divisionId: number; facultyName: string | null;
   hasSession: boolean; sessionId: number | null; sessionNumber: number | null; noSwipes: boolean;
   attendance: Array<{ id: number; status: string }>;
+  roomName: string | null;
   date?: string;
 }
 interface CalendarDay  { date: string; dayOfWeek: number; dayName: string; slots: CalendarSlot[]; }
 interface CalendarData { weekOf: string; weekEnd: string; weekDates: string[]; calendar: CalendarDay[]; divisions: Array<{ id: number; name: string }>; }
-
-const C = {
-  card:    "var(--color-bg-card)",
-  sec:     "var(--color-bg-secondary)",
-  border:  "var(--color-border)",
-  text:    "var(--color-text-primary)",
-  muted:   "var(--color-text-muted)",
-  sub:     "var(--color-text-secondary)",
-  accent:  "var(--color-accent)",
-  accentS: "var(--color-accent-sec)",
-  accentG: "var(--color-accent-glow)",
-  success: "var(--color-success)",
-  warning: "var(--color-warning)",
-  danger:  "var(--color-danger)",
-};
 
 export default function OfficeAttendance() {
   const [loading, setLoading]         = useState(true);
@@ -54,6 +43,16 @@ export default function OfficeAttendance() {
   const [filterDiv, setFilterDiv]     = useState("");
   const [selectedSession, setSelectedSession] = useState<CalendarSlot | null>(null);
   const [attRecords, setAttRecords]   = useState<any[]>([]);
+  const [editingRemarks, setEditingRemarks] = useState<Record<number, string>>({});
+
+  const [reportStartDate, setReportStartDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split("T")[0];
+  });
+  const [reportEndDate, setReportEndDate]     = useState(new Date().toISOString().split("T")[0]);
+  const [reportDivisionId, setReportDivisionId] = useState("");
+  const [reportCourseId, setReportCourseId]   = useState("");
+  const [courses, setCourses]                 = useState<Array<{ id: number; code: string; name: string }>>([]);
+  const [reportLoading, setReportLoading]     = useState(false);
 
   const fetchCalendar = async (offset: number, divId?: string) => {
     const ref = new Date();
@@ -65,7 +64,14 @@ export default function OfficeAttendance() {
   };
 
   useEffect(() => {
-    (async () => { await fetchCalendar(0); setLoading(false); })();
+    (async () => {
+      const [, cRes] = await Promise.all([fetchCalendar(0), fetch("/api/admin/courses")]);
+      if (cRes.ok) {
+        const data = await cRes.json();
+        setCourses(data.map((c: any) => ({ id: c.id, code: c.code, name: c.name })));
+      }
+      setLoading(false);
+    })();
   }, []);
 
   const processFile = async (file: File) => {
@@ -95,25 +101,63 @@ export default function OfficeAttendance() {
 
   const openAttendance = async (slot: CalendarSlot) => {
     if (!slot.sessionId) return;
-    setSelectedSession(slot); setAttRecords([]);
+    setSelectedSession(slot); setAttRecords([]); setEditingRemarks({});
     const res = await fetch(`/api/admin/attendance?sessionId=${slot.sessionId}`);
-    if (res.ok) setAttRecords((await res.json()).records);
+    if (res.ok) {
+      const data = await res.json();
+      setAttRecords(data.records);
+      const remarksInit: Record<number, string> = {};
+      data.records.forEach((r: any) => { if (r.remarks) remarksInit[r.studentId] = r.remarks; });
+      setEditingRemarks(remarksInit);
+    }
   };
 
   const updateAttendance = async (studentId: number, status: string) => {
     if (!selectedSession?.sessionId) return;
-    setAttRecords(prev => prev.map(r => r.studentId === studentId ? { ...r, status } : r));
+    const remarks = editingRemarks[studentId] || null;
+    setAttRecords(prev => prev.map(r => r.studentId === studentId ? { ...r, status, remarks } : r));
     await fetch("/api/admin/attendance", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: selectedSession.sessionId, studentId, status }),
+      body: JSON.stringify({ sessionId: selectedSession.sessionId, studentId, status, remarks }),
     });
     fetchCalendar(weekOffset, filterDiv);
+  };
+
+  const saveRemarks = async (studentId: number) => {
+    const record = attRecords.find(r => r.studentId === studentId);
+    if (!record || !selectedSession?.sessionId || record.status === "None") return;
+    const remarks = editingRemarks[studentId] || null;
+    if (remarks === (record.remarks || null)) return; // no change
+    setAttRecords(prev => prev.map(r => r.studentId === studentId ? { ...r, remarks } : r));
+    await fetch("/api/admin/attendance", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: selectedSession.sessionId, studentId, status: record.status, remarks }),
+    });
+  };
+
+  const downloadReport = async () => {
+    setReportLoading(true);
+    try {
+      let url = `/api/admin/attendance/report?startDate=${reportStartDate}&endDate=${reportEndDate}`;
+      if (reportDivisionId) url += `&divisionId=${reportDivisionId}`;
+      if (reportCourseId)   url += `&courseId=${reportCourseId}`;
+      const res = await fetch(url);
+      if (!res.ok) { alert("Failed to generate report"); return; }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `attendance-${reportStartDate}-to-${reportEndDate}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      setReportLoading(false);
+    }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="rounded-full border-2 animate-spin" style={{ width: 40, height: 40, borderColor: "rgba(255,255,255,0.3)", borderTopColor: "white" }} />
+        <Spinner size={40} />
       </div>
     );
   }
@@ -124,13 +168,13 @@ export default function OfficeAttendance() {
     <div className="relative z-[1]">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-1" style={{ color: C.text }}>Attendance Management</h1>
-        <p style={{ color: C.sub }}>Upload biometric logs or update attendance manually</p>
+        <h1 className="text-3xl font-bold mb-1 text-[var(--color-text-primary)]">Attendance Management</h1>
+        <p className="text-[var(--color-text-secondary)]">Upload biometric logs or update attendance manually</p>
       </div>
 
       {/* ── Upload Section ── */}
       <div className="mb-10">
-        <h2 className="text-lg font-semibold mb-4" style={{ color: C.text }}>📤 Upload Biometric Log</h2>
+        <h2 className="text-lg font-semibold mb-4 text-[var(--color-text-primary)]">📤 Upload Biometric Log</h2>
 
         {!selectedFile && !uploading && !uploadResults && (
           <div
@@ -138,48 +182,47 @@ export default function OfficeAttendance() {
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
-            className="rounded-2xl border-2 border-dashed p-12 text-center cursor-pointer transition-all"
-            style={{ borderColor: dragOver ? C.accent : C.border, background: dragOver ? C.accentG : C.card }}
+            className={`rounded-2xl border-2 border-dashed p-12 text-center cursor-pointer transition-all ${
+              dragOver
+                ? "border-[var(--color-accent)] bg-[var(--color-accent-glow)]"
+                : "border-[var(--color-border)] bg-[var(--color-bg-card)]"
+            }`}
           >
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; }} />
             <div className="text-5xl mb-4">📁</div>
-            <div className="text-base font-semibold mb-1" style={{ color: C.text }}>Drop Excel/CSV file here or click to upload</div>
-            <div className="text-sm" style={{ color: C.muted }}>Supports .xlsx (primary) and pipe-delimited .csv</div>
+            <div className="text-base font-semibold mb-1 text-[var(--color-text-primary)]">Drop Excel/CSV file here or click to upload</div>
+            <div className="text-sm text-[var(--color-text-muted)]">Supports .xlsx (primary) and pipe-delimited .csv</div>
           </div>
         )}
 
         {uploading && (
-          <div className="rounded-2xl border-2 border-dashed p-12 text-center" style={{ borderColor: C.border, background: C.card }}>
+          <div className="rounded-2xl border-2 border-dashed p-12 text-center border-[var(--color-border)] bg-[var(--color-bg-card)]">
             <div className="flex justify-center mb-4">
-              <div className="rounded-full border-4 animate-spin" style={{ width: 48, height: 48, borderColor: "rgba(255,255,255,0.2)", borderTopColor: "white" }} />
+              <Spinner size={48} />
             </div>
-            <div className="text-base font-semibold" style={{ color: C.text }}>Processing...</div>
-            <div className="text-sm mt-1" style={{ color: C.muted }}>Mapping swipes to timetable slots</div>
+            <div className="text-base font-semibold text-[var(--color-text-primary)]">Processing...</div>
+            <div className="text-sm mt-1 text-[var(--color-text-muted)]">Mapping swipes to timetable slots</div>
           </div>
         )}
 
         {selectedFile && !uploading && previewData && (
-          <div className="rounded-2xl border p-5" style={{ background: C.card, borderColor: C.border }}>
+          <div className="rounded-2xl border p-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-base font-semibold" style={{ color: C.text }}>Preview: {selectedFile.name}</h3>
-                <p className="text-sm mt-1" style={{ color: C.muted }}>Showing first few rows. Please confirm format is correct.</p>
+                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Preview: {selectedFile.name}</h3>
+                <p className="text-sm mt-1 text-[var(--color-text-muted)]">Showing first few rows. Please confirm format is correct.</p>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => { setSelectedFile(null); setPreviewData(null); }}
-                  className="px-4 py-2 rounded-lg text-sm cursor-pointer"
-                  style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>Cancel</button>
-                <button onClick={confirmUpload}
-                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white cursor-pointer"
-                  style={{ background: "linear-gradient(135deg,#6366f1,#7c3aed)", border: "none", fontFamily: "inherit" }}>Confirm & Upload</button>
+                <Button variant="secondary" onClick={() => { setSelectedFile(null); setPreviewData(null); }}>Cancel</Button>
+                <Button variant="primary" onClick={confirmUpload}>Confirm & Upload</Button>
               </div>
             </div>
-            <div className="overflow-x-auto rounded-lg border" style={{ borderColor: C.border }}>
+            <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
               <table className="tw-table">
                 <tbody>
                   {previewData.map((row, i) => (
-                    <tr key={i} style={i === 0 ? { background: C.sec, fontWeight: 600 } : {}}>
+                    <tr key={i} className={i === 0 ? "bg-[var(--color-bg-secondary)] font-semibold" : ""}>
                       {row.map((cell, j) => <td key={j}>{cell}</td>)}
                     </tr>
                   ))}
@@ -190,105 +233,141 @@ export default function OfficeAttendance() {
         )}
 
         {uploadResults && (
-          <div className="rounded-2xl border p-5 relative" style={{ background: C.card, borderColor: C.border }}>
+          <div className="rounded-2xl border p-5 relative bg-[var(--color-bg-card)] border-[var(--color-border)]">
             <button onClick={() => setUploadResults(null)}
-              className="absolute top-4 right-4 bg-transparent border-0 cursor-pointer text-lg" style={{ color: C.muted }}>✕</button>
-            <h3 className="text-base font-semibold mb-4" style={{ color: C.text }}>✅ Upload Processed Successfully</h3>
-            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))" }}>
+              className="absolute top-4 right-4 bg-transparent border-0 cursor-pointer text-lg text-[var(--color-text-muted)]">✕</button>
+            <h3 className="text-base font-semibold mb-4 text-[var(--color-text-primary)]">✅ Upload Processed Successfully</h3>
+            <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(120px,1fr))]">
               {[
-                { v: uploadResults.totalSwipes,       l: "Total Swipes",     c: C.accentS },
-                { v: uploadResults.sessionsCreated,   l: "Sessions Created", c: C.accentS },
-                { v: uploadResults.attendanceMarked,  l: "Present",          c: C.success },
-                { v: uploadResults.lateMarked,        l: "Late",             c: C.warning },
-                { v: uploadResults.absentMarked,      l: "Absent",           c: C.danger  },
-                { v: uploadResults.duplicatesSkipped, l: "Duplicates",       c: C.muted   },
-              ].map(({ v, l, c }) => (
-                <div key={l} className="p-3 rounded-lg text-center" style={{ background: C.sec }}>
-                  <div className="text-2xl font-bold" style={{ color: c }}>{v}</div>
-                  <div className="text-xs uppercase tracking-wide mt-1" style={{ color: C.muted }}>{l}</div>
+                { v: uploadResults.totalSwipes,       l: "Total Swipes",     cls: "text-[var(--color-accent-sec)]" },
+                { v: uploadResults.sessionsCreated,   l: "Sessions Created", cls: "text-[var(--color-accent-sec)]" },
+                { v: uploadResults.attendanceMarked,  l: "Present",          cls: "text-[var(--color-success)]" },
+                { v: uploadResults.lateMarked,        l: "Late",             cls: "text-[var(--color-warning)]" },
+                { v: uploadResults.absentMarked,      l: "Absent",           cls: "text-[var(--color-danger)]" },
+                { v: uploadResults.duplicatesSkipped, l: "Duplicates",       cls: "text-[var(--color-text-muted)]" },
+              ].map(({ v, l, cls }) => (
+                <div key={l} className="p-3 rounded-lg text-center bg-[var(--color-bg-secondary)]">
+                  <div className={`text-2xl font-bold ${cls}`}>{v}</div>
+                  <div className="text-xs uppercase tracking-wide mt-1 text-[var(--color-text-muted)]">{l}</div>
                 </div>
               ))}
             </div>
             {uploadResults.studentsNotFound > 0 && (
-              <p className="mt-3 text-xs" style={{ color: C.warning }}>⚠️ {uploadResults.studentsNotFound} roll numbers not found</p>
+              <p className="mt-3 text-xs text-[var(--color-warning)]">⚠️ {uploadResults.studentsNotFound} roll numbers not found</p>
             )}
           </div>
         )}
       </div>
 
+      {/* ── Report Download Section ── */}
+      <div className="mb-10 border-t border-[var(--color-border)] pt-6">
+        <h2 className="text-lg font-semibold mb-1 text-[var(--color-text-primary)]">📊 Download Attendance Report</h2>
+        <p className="text-sm mb-4 text-[var(--color-text-secondary)]">Export attendance records as CSV with optional filters.</p>
+        <div className="flex gap-3 flex-wrap items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-[var(--color-text-muted)]">From</label>
+            <input type="date" className="tw-input" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-[var(--color-text-muted)]">To</label>
+            <input type="date" className="tw-input" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-[var(--color-text-muted)]">Division</label>
+            <select className="tw-input w-[180px]" value={reportDivisionId} onChange={e => setReportDivisionId(e.target.value)}>
+              <option value="">All Divisions</option>
+              {calData?.divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-[var(--color-text-muted)]">Course</label>
+            <select className="tw-input w-[240px]" value={reportCourseId} onChange={e => setReportCourseId(e.target.value)}>
+              <option value="">All Courses</option>
+              {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
+            </select>
+          </div>
+          <Button variant="primary" onClick={downloadReport} disabled={reportLoading}>
+            {reportLoading ? "Generating…" : "Download CSV"}
+          </Button>
+        </div>
+      </div>
+
       {/* ── Calendar Section ── */}
       {calData && (
         <>
-          <div className="flex justify-between items-start border-t pt-6 mb-4 flex-wrap gap-3" style={{ borderColor: C.border }}>
+          <div className="flex justify-between items-start border-t border-[var(--color-border)] pt-6 mb-4 flex-wrap gap-3">
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: C.text }}>✏️ Manual Update via Calendar</h2>
-              <p className="text-sm mt-1" style={{ color: C.sub }}>Click a completed session to adjust marks individually.</p>
+              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">✏️ Manual Update via Calendar</h2>
+              <p className="text-sm mt-1 text-[var(--color-text-secondary)]">Click any session to mark or adjust attendance.</p>
             </div>
             <div className="flex gap-2 items-center flex-wrap">
-              <select className="tw-input" style={{ width: 180 }} value={filterDiv} onChange={e => handleDivChange(e.target.value)}>
+              <select className="tw-input w-[180px]" value={filterDiv} onChange={e => handleDivChange(e.target.value)}>
                 <option value="">All Divisions</option>
                 {calData.divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
-              <div className="flex items-center gap-1 rounded-lg p-1" style={{ background: C.sec }}>
+              <div className="flex items-center gap-1 rounded-lg p-1 bg-[var(--color-bg-secondary)]">
                 <button onClick={() => handleWeekChange(-1)}
-                  className="px-3 py-1.5 text-xs rounded cursor-pointer"
-                  style={{ background: "transparent", border: "none", color: C.sub, fontFamily: "inherit" }}>←</button>
-                <span className="px-2 text-sm font-medium" style={{ color: C.text }}>{calData.weekDates[0]} → {calData.weekDates[6]}</span>
+                  className="px-3 py-1.5 text-xs rounded cursor-pointer bg-transparent border-none text-[var(--color-text-secondary)] font-[inherit]">←</button>
+                <span className="px-2 text-sm font-medium text-[var(--color-text-primary)]">{calData.weekDates[0]} → {calData.weekDates[6]}</span>
                 <button onClick={() => handleWeekChange(1)}
-                  className="px-3 py-1.5 text-xs rounded cursor-pointer"
-                  style={{ background: "transparent", border: "none", color: C.sub, fontFamily: "inherit" }}>→</button>
+                  className="px-3 py-1.5 text-xs rounded cursor-pointer bg-transparent border-none text-[var(--color-text-secondary)] font-[inherit]">→</button>
               </div>
-              <button onClick={() => { setWeekOffset(0); fetchCalendar(0, filterDiv); }}
-                className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
-                style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>Today</button>
+              <Button variant="secondary" size="sm" onClick={() => { setWeekOffset(0); fetchCalendar(0, filterDiv); }}>Today</Button>
             </div>
           </div>
 
           <div className="text-xs overflow-x-auto" style={{ display: "grid", gridTemplateColumns: "72px repeat(6,1fr)", gap: 2 }}>
-            <div className="p-2 font-bold" style={{ color: C.muted }}>Slot</div>
+            <div className="p-2 font-bold text-[var(--color-text-muted)]">Slot</div>
             {calData.calendar.map(day => (
-              <div key={day.date} className="p-2 font-bold text-center rounded"
-                style={{ color: day.date === today ? C.accentS : C.text, background: day.date === today ? C.accentG : "transparent" }}>
+              <div key={day.date}
+                className={`p-2 font-bold text-center rounded ${
+                  day.date === today
+                    ? "text-[var(--color-accent-sec)] bg-[var(--color-accent-glow)]"
+                    : "text-[var(--color-text-primary)] bg-transparent"
+                }`}>
                 {day.dayName}<br />
-                <span className="font-normal" style={{ fontSize: 11, color: C.muted }}>{day.date.slice(5)}</span>
+                <span className="font-normal text-[var(--color-text-muted)]" style={{ fontSize: 11 }}>{day.date.slice(5)}</span>
               </div>
             ))}
             {FIXED_SLOTS.map(st => (
               <React.Fragment key={st.slot}>
-                <div className="flex flex-col justify-center" style={{ padding: "10px 6px", borderTop: `1px solid ${C.border}`, color: C.muted }}>
+                <div className="flex flex-col justify-center border-t border-[var(--color-border)] text-[var(--color-text-muted)]"
+                  style={{ padding: "10px 6px" }}>
                   <div className="font-semibold">S{st.slot}</div>
                   <div>{st.label}</div>
                 </div>
                 {calData.calendar.map(day => {
                   const slot = day.slots.find(s => s.slotNumber === st.slot);
                   if (!slot || (filterDiv && slot.divisionId !== parseInt(filterDiv))) {
-                    return <div key={`${day.date}-${st.slot}`} style={{ padding: 6, borderTop: `1px solid ${C.border}` }} />;
+                    return <div key={`${day.date}-${st.slot}`} className="p-1.5 border-t border-[var(--color-border)]" />;
                   }
                   const p  = slot.attendance.filter(a => a.status === "P"  || a.status === "P#").length;
                   const ab = slot.attendance.filter(a => a.status === "AB").length;
                   const lt = slot.attendance.filter(a => a.status === "LT").length;
-                  const clickable = slot.hasSession && !slot.noSwipes;
+                  const clickable = !!slot.sessionId;
+                  const hasAttendance = slot.attendance.length > 0;
                   return (
                     <div key={`${day.date}-${st.slot}`}
                       onClick={() => { if (clickable) openAttendance({ ...slot, date: day.date }); }}
-                      className="rounded"
-                      style={{ padding: 6, borderTop: `1px solid ${C.border}`, marginTop: 2,
-                        borderLeft: `3px solid ${slot.courseType === "core" ? C.accent : C.warning}`,
-                        background: C.sec, cursor: clickable ? "pointer" : "default" }}>
-                      <div className="font-bold" style={{ color: C.text }}>{slot.courseCode}</div>
-                      <div className="truncate" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{slot.courseName}</div>
-                      <div style={{ fontSize: 10, color: C.accentS, marginTop: 2 }}>
+                      className="rounded bg-[var(--color-bg-secondary)] mt-0.5"
+                      style={{ padding: 6, borderTop: "1px solid varvar(--color-border)",
+                        borderLeft: `3px solid var(${slot.courseType === "core" ? "--color-accent" : "--color-warning"})`,
+                        cursor: clickable ? "pointer" : "default" }}>
+                      <div className="font-bold text-[var(--color-text-primary)]">{slot.courseCode}</div>
+                      <div className="truncate mt-0.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{slot.courseName}</div>
+                      <div className="mt-0.5 text-[var(--color-accent-sec)]" style={{ fontSize: 10 }}>
                         Div {slot.divisionName}{slot.facultyName && ` • ${slot.facultyName.split(" ")[1]}`}
+                        {slot.roomName && ` • ${slot.roomName}`}
                       </div>
-                      {slot.hasSession ? (
-                        slot.noSwipes
-                          ? <div style={{ fontSize: 10, color: C.warning, fontWeight: 600, marginTop: 4 }}>⚠️ Upload Missing</div>
-                          : <div className="flex gap-1.5 mt-2 font-medium" style={{ fontSize: 11 }}>
-                              <span style={{ color: C.success }}>{p} P</span>
-                              {ab > 0 && <span style={{ color: C.danger }}>{ab} AB</span>}
-                              {lt > 0 && <span style={{ color: C.warning }}>{lt} LT</span>}
-                            </div>
-                      ) : <div style={{ marginTop: 8, fontSize: 10, color: C.muted }}>Upcoming</div>}
+                      {hasAttendance ? (
+                        <div className="flex gap-1.5 mt-2 font-medium" style={{ fontSize: 11 }}>
+                          <span className="text-[var(--color-success)]">{p} P</span>
+                          {ab > 0 && <span className="text-[var(--color-danger)]">{ab} AB</span>}
+                          {lt > 0 && <span className="text-[var(--color-warning)]">{lt} LT</span>}
+                        </div>
+                      ) : (
+                        <div className="mt-1 font-semibold text-[var(--color-accent-sec)]" style={{ fontSize: 10 }}>Click to mark</div>
+                      )}
                     </div>
                   );
                 })}
@@ -296,68 +375,75 @@ export default function OfficeAttendance() {
             ))}
           </div>
 
-          <div className="flex gap-4 mt-5 text-xs" style={{ color: C.muted }}>
-            <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle" style={{ background: C.accent }} /> Core</span>
-            <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle" style={{ background: C.warning }} /> Specialisation</span>
+          <div className="flex gap-4 mt-5 text-xs text-[var(--color-text-muted)]">
+            <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle bg-[var(--color-accent)]" /> Core</span>
+            <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle bg-[var(--color-warning)]" /> Specialisation</span>
           </div>
         </>
       )}
 
       {/* ── Manual Attendance Modal ── */}
-      {selectedSession && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.6)" }} onClick={() => setSelectedSession(null)}>
-          <div className="rounded-2xl flex flex-col w-full max-w-2xl mx-4" style={{ background: C.sec, maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: C.border }}>
-              <div>
-                <h2 className="text-xl font-semibold" style={{ color: C.text }}>Manual Attendance Update</h2>
-                <p className="text-sm mt-1" style={{ color: C.sub }}>
-                  {selectedSession.date} · Slot {selectedSession.slotNumber} · {selectedSession.courseName} · Div {selectedSession.divisionName}
-                </p>
-              </div>
-              <button onClick={() => setSelectedSession(null)} className="bg-transparent border-0 cursor-pointer text-xl" style={{ color: C.muted }}>✕</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              {attRecords.length === 0
-                ? <div className="flex justify-center py-10">
-                    <div className="rounded-full border-2 animate-spin" style={{ width: 36, height: 36, borderColor: "rgba(255,255,255,0.2)", borderTopColor: "white" }} />
-                  </div>
-                : (
-                  <table className="tw-table">
-                    <thead><tr><th>Roll No.</th><th>Student</th><th>Swipe</th><th>Status</th></tr></thead>
-                    <tbody>
-                      {attRecords.map(r => (
-                        <tr key={r.studentId}>
-                          <td style={{ color: C.text }}>{r.rollNumber}</td>
-                          <td style={{ color: C.sub }}>{r.studentName}</td>
-                          <td style={{ color: C.muted }}>{r.swipeTime || "—"}</td>
-                          <td>
-                            <div className="flex gap-1">
-                              {(["P","P#","LT","AB"] as const).map(s => {
-                                const active = r.status === s;
-                                const col = s==="P" ? C.success : s==="AB" ? C.danger : s==="LT" ? C.warning : C.accent;
-                                return (
-                                  <button key={s} onClick={() => updateAttendance(r.studentId, s)}
-                                    style={{ padding: "3px 8px", background: active ? col+"22" : "transparent", border: `1px solid ${active ? col : C.border}`, borderRadius: 4, color: active ? col : C.muted, fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>
-                                    {s}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-            </div>
-            <div className="px-6 py-4 border-t flex justify-end" style={{ borderColor: C.border }}>
-              <button onClick={() => setSelectedSession(null)}
-                className="px-5 py-2 rounded-lg text-sm cursor-pointer"
-                style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={!!selectedSession}
+        onClose={() => setSelectedSession(null)}
+        title="Manual Attendance Update"
+        subtitle={selectedSession ? `${selectedSession.date} · Slot ${selectedSession.slotNumber} · ${selectedSession.courseName} · Div ${selectedSession.divisionName}` : ""}
+        maxWidth="max-w-4xl"
+        footer={
+          <Button variant="secondary" onClick={() => setSelectedSession(null)}>Close</Button>
+        }
+      >
+        {attRecords.length === 0
+          ? <div className="flex justify-center py-10"><Spinner size={36} /></div>
+          : (
+            <table className="tw-table">
+              <thead><tr><th>Roll No.</th><th>Student</th><th>Swipe</th><th>Status</th><th>Remarks</th></tr></thead>
+              <tbody>
+                {attRecords.map(r => (
+                  <tr key={r.studentId}>
+                    <td className="text-[var(--color-text-primary)]">{r.rollNumber}</td>
+                    <td className="text-[var(--color-text-secondary)]">{r.studentName}</td>
+                    <td className="text-[var(--color-text-muted)]">{r.swipeTime || "—"}</td>
+                    <td>
+                      <div className="flex gap-1">
+                        {(["P","P#","LT","AB"] as const).map(s => {
+                          const active = r.status === s;
+                          const colVar = s==="P" ? "--color-success" : s==="AB" ? "--color-danger" : s==="LT" ? "--color-warning" : "--color-accent";
+                          return (
+                            <button key={s} onClick={() => updateAttendance(r.studentId, s)}
+                              className={`px-2 py-0.5 rounded cursor-pointer font-[inherit] ${
+                                active
+                                  ? `border border-[${colVar}] text-[${colVar}]`
+                                  : `border border-[var(--color-border)] text-[var(--color-text-muted)]`
+                              }`}
+                              style={{
+                                fontSize: 11,
+                                background: active ? `var(${colVar})22` : "transparent",
+                                borderColor: `var(${active ? colVar : "--color-border"})`,
+                                color: `var(${active ? colVar : "--color-text-muted"})`,
+                              }}>
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        className="tw-input px-2 py-1 text-[11px] w-[160px] min-w-[120px]"
+                        placeholder="Add remark..."
+                        value={editingRemarks[r.studentId] || ""}
+                        onChange={e => setEditingRemarks(prev => ({ ...prev, [r.studentId]: e.target.value }))}
+                        onBlur={() => saveRemarks(r.studentId)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+      </Modal>
     </div>
   );
 }

@@ -1,0 +1,14 @@
+
+> student-companion-demo@0.1.0 dev
+> next dev
+
+ÔÜá Port 3000 is in use by process 10388, using available port 3001 instead.
+Ôû▓ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://10.182.2.233:3001
+- Environments: .env
+
+Ô£ô Starting...
+Ô¿» Unable to acquire lock at E:\Dev\student-companion-demo\.next\dev\lock, is another instance of next dev running?
+  Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[?25h

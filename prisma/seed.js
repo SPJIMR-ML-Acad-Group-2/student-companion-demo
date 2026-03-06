@@ -25,6 +25,7 @@ async function main() {
   console.log("🗑️  Clearing database...");
   await prisma.attendance.deleteMany();
   await prisma.timetable.deleteMany();
+  await prisma.room.deleteMany();
   await prisma.facultyCourse.deleteMany();
   await prisma.courseTerm.deleteMany();
   await prisma.course.deleteMany();
@@ -59,6 +60,13 @@ async function main() {
 
   const t3pgdm = pgdmTerms[2];
   const t3bm = bmTerms[2];
+
+  // ─── Rooms ─────────────────────────────────────────
+  console.log("🏠 Creating rooms...");
+  const roomNames = ["LT-1", "LT-2", "LT-3", "Room 101", "Room 102", "Room 103", "Amphitheatre", "Lab 1", "Lab 2"];
+  for (const name of roomNames) {
+    await prisma.room.create({ data: { name } });
+  }
 
   // ─── Specialisations ────────────────────────────────
   console.log("⭐ Creating specialisations...");

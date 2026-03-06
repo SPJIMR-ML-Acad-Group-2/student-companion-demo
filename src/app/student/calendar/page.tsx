@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
 
 const FIXED_SLOTS = [
   { slot: 1, label: "8:15–9:00"   }, { slot: 2, label: "9:00–10:10"  },
@@ -15,24 +17,10 @@ interface CalendarSlot {
   divisionName: string; divisionId: number; facultyName: string | null;
   hasSession: boolean; sessionId: number | null; sessionNumber: number | null; noSwipes: boolean;
   attendance: Array<{ id: number; status: string }>;
+  roomName: string | null;
 }
 interface CalendarDay { date: string; dayOfWeek: number; dayName: string; slots: CalendarSlot[]; }
 interface CalendarData { weekOf: string; weekEnd: string; weekDates: string[]; calendar: CalendarDay[]; divisions: Array<{ id: number; name: string }>; }
-
-const C = {
-  card:    "var(--color-bg-card)",
-  sec:     "var(--color-bg-secondary)",
-  border:  "var(--color-border)",
-  text:    "var(--color-text-primary)",
-  muted:   "var(--color-text-muted)",
-  sub:     "var(--color-text-secondary)",
-  accent:  "var(--color-accent)",
-  accentS: "var(--color-accent-sec)",
-  accentG: "var(--color-accent-glow)",
-  success: "var(--color-success)",
-  warning: "var(--color-warning)",
-  danger:  "var(--color-danger)",
-};
 
 export default function StudentCalendar() {
   const [data, setData]           = useState<CalendarData | null>(null);
@@ -53,7 +41,7 @@ export default function StudentCalendar() {
   if (loading || !data) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="rounded-full border-2 animate-spin" style={{ width: 40, height: 40, borderColor: "rgba(255,255,255,0.3)", borderTopColor: "white" }} />
+        <Spinner size={40} />
       </div>
     );
   }
@@ -64,59 +52,53 @@ export default function StudentCalendar() {
     <div className="relative z-[1]">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-1" style={{ color: C.text }}>📅 My Schedule</h1>
-        <p className="text-sm" style={{ color: C.sub }}>Weekly timetable with your attendance status</p>
+        <h1 className="text-3xl font-bold mb-1 text-[var(--color-text-primary)]">📅 My Schedule</h1>
+        <p className="text-sm text-[var(--color-text-secondary)]">Weekly timetable with your attendance status</p>
       </div>
 
       {/* Week nav */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <button onClick={() => handleWeekChange(-1)}
-          className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
-          style={{ background: C.sec, border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>◀ Prev</button>
-        <span className="text-sm font-semibold" style={{ color: C.text }}>
+        <Button variant="secondary" size="sm" className="rounded-lg" onClick={() => handleWeekChange(-1)}>◀ Prev</Button>
+        <span className="text-sm font-semibold text-[var(--color-text-primary)]">
           {fmtDate(data.weekOf)} — {fmtDate(data.weekEnd)}
         </span>
-        <button onClick={() => handleWeekChange(1)}
-          className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
-          style={{ background: C.sec, border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>Next ▶</button>
+        <Button variant="secondary" size="sm" className="rounded-lg" onClick={() => handleWeekChange(1)}>Next ▶</Button>
         {weekOffset !== 0 && (
-          <button onClick={() => { setWeekOffset(0); fetchCalendar(0); }}
-            className="px-3 py-1.5 text-xs rounded-lg cursor-pointer"
-            style={{ background: C.sec, border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}>Today</button>
+          <Button variant="secondary" size="sm" className="rounded-lg" onClick={() => { setWeekOffset(0); fetchCalendar(0); }}>Today</Button>
         )}
       </div>
 
       {/* Calendar grid */}
       <div className="text-xs overflow-x-auto" style={{ display: "grid", gridTemplateColumns: "80px repeat(6,1fr)", gap: 2 }}>
         {/* Column headers */}
-        <div className="p-2 font-bold" style={{ color: C.muted }}>Slot</div>
+        <div className="p-2 font-bold text-[var(--color-text-muted)]">Slot</div>
         {data.calendar.map(day => (
-          <div key={day.date} className="p-2 font-bold text-center rounded"
-            style={{ color: day.date === today ? C.accentS : C.text, background: day.date === today ? C.accentG : "transparent" }}>
+          <div key={day.date}
+            className={`p-2 font-bold text-center rounded ${day.date === today ? "text-[var(--color-accent-sec)] bg-[var(--color-accent-glow)]" : "text-[var(--color-text-primary)] bg-transparent"}`}>
             {day.dayName}<br />
-            <span className="font-normal" style={{ fontSize: 11, color: C.muted }}>{day.date.slice(5)}</span>
+            <span className="font-normal text-[var(--color-text-muted)]" style={{ fontSize: 11 }}>{day.date.slice(5)}</span>
           </div>
         ))}
 
         {/* Slot rows */}
         {FIXED_SLOTS.map(slotDef => (
           <React.Fragment key={slotDef.slot}>
-            <div className="flex flex-col justify-center"
-              style={{ padding: "10px 6px", borderTop: `1px solid ${C.border}`, color: C.muted }}>
+            <div className="flex flex-col justify-center border-t border-[var(--color-border)] text-[var(--color-text-muted)]"
+              style={{ padding: "10px 6px" }}>
               <div className="font-semibold">S{slotDef.slot}</div>
               <div>{slotDef.label}</div>
             </div>
             {data.calendar.map(day => {
               const entry = day.slots.find(s => s.slotNumber === slotDef.slot);
               if (!entry) {
-                return <div key={`${day.date}-${slotDef.slot}`} style={{ padding: 6, borderTop: `1px solid ${C.border}` }} />;
+                return <div key={`${day.date}-${slotDef.slot}`} className="p-1.5 border-t border-[var(--color-border)]" />;
               }
               const att = entry.attendance?.[0];
               const statusColor =
-                !att          ? C.muted :
-                att.status === "P"  ? C.success :
-                att.status === "AB" ? C.danger :
-                att.status === "P#" ? "#3b82f6" : C.warning;
+                !att          ? "text-[var(--color-text-muted)]" :
+                att.status === "P"  ? "text-[var(--color-success)]" :
+                att.status === "AB" ? "text-[var(--color-danger)]" :
+                att.status === "P#" ? "text-[#3b82f6]" : "text-[var(--color-warning)]";
               const statusLabel =
                 !att          ? (entry.hasSession ? (entry.noSwipes ? "⚠ No Swipes" : "—") : "") :
                 att.status === "P"  ? "✓ Present" :
@@ -125,21 +107,24 @@ export default function StudentCalendar() {
               const bgColor =
                 att?.status === "P"  ? "rgba(34,197,94,0.07)"  :
                 att?.status === "AB" ? "rgba(239,68,68,0.07)"  :
-                att?.status === "P#" ? "rgba(59,130,246,0.07)" : C.sec;
+                att?.status === "P#" ? "rgba(59,130,246,0.07)" : "varvar(--color-bg-secondary)";
 
               return (
                 <div key={`${day.date}-${slotDef.slot}`}
-                  style={{ padding: 8, borderTop: `1px solid ${C.border}`, borderRadius: 4,
-                    background: entry.hasSession ? bgColor : C.sec,
-                    borderLeft: `3px solid ${entry.courseType === "core" ? C.accent : C.warning}` }}>
-                  <div className="font-bold" style={{ color: C.text }}>
+                  className="p-2 border-t border-[var(--color-border)] rounded"
+                  style={{
+                    background: entry.hasSession ? bgColor : "varvar(--color-bg-secondary)",
+                    borderLeft: `3px solid var(${entry.courseType === "core" ? "--color-accent" : "--color-warning"})`,
+                  }}>
+                  <div className="font-bold text-[var(--color-text-primary)]">
                     {entry.courseCode}
-                    {entry.sessionNumber && <span className="font-normal float-right" style={{ fontSize: 9, color: C.muted }}>S{entry.sessionNumber}</span>}
+                    {entry.sessionNumber && <span className="font-normal float-right text-[var(--color-text-muted)]" style={{ fontSize: 9 }}>S{entry.sessionNumber}</span>}
                   </div>
-                  <div className="truncate" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{entry.courseName}</div>
-                  {entry.facultyName && <div style={{ fontSize: 10, color: C.accentS, marginTop: 2 }}>{entry.facultyName}</div>}
+                  <div className="truncate text-[var(--color-text-muted)] mt-0.5" style={{ fontSize: 10 }}>{entry.courseName}</div>
+                  {entry.facultyName && <div className="text-[var(--color-accent-sec)] mt-0.5" style={{ fontSize: 10 }}>{entry.facultyName}</div>}
+                  {entry.roomName && <div className="text-[var(--color-text-muted)] mt-px" style={{ fontSize: 10 }}>{entry.roomName}</div>}
                   {entry.hasSession && (
-                    <div style={{ fontSize: 10, fontWeight: 600, color: statusColor, marginTop: 4 }}>{statusLabel}</div>
+                    <div className={`font-semibold mt-1 ${statusColor}`} style={{ fontSize: 10 }}>{statusLabel}</div>
                   )}
                 </div>
               );
@@ -149,13 +134,13 @@ export default function StudentCalendar() {
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4 mt-5 text-xs flex-wrap" style={{ color: C.muted }}>
-        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle" style={{ background: C.accent }} /> Core</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle" style={{ background: C.warning }} /> Specialisation</span>
-        <span style={{ color: C.success }}>✓ Present</span>
-        <span style={{ color: C.danger }}>✗ Absent</span>
-        <span style={{ color: C.warning }}>⏱ Late</span>
-        <span style={{ color: "#3b82f6" }}>🛡 Leave</span>
+      <div className="flex gap-4 mt-5 text-xs flex-wrap text-[var(--color-text-muted)]">
+        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle bg-[var(--color-accent)]" /> Core</span>
+        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle bg-[var(--color-warning)]" /> Specialisation</span>
+        <span className="text-[var(--color-success)]">✓ Present</span>
+        <span className="text-[var(--color-danger)]">✗ Absent</span>
+        <span className="text-[var(--color-warning)]">⏱ Late</span>
+        <span className="text-[#3b82f6]">🛡 Leave</span>
       </div>
     </div>
   );

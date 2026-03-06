@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma generate)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx prisma db push --accept-data-loss)",
+      "Bash(node -e \"const p = require\\(''@tailwindcss/postcss''\\); console.log\\(typeof p\\)\")",
+      "Bash(node -e \"const pkg = require\\(''./node_modules/next/package.json''\\); console.log\\(''Next.js version:'', pkg.version\\)\")",
+      "Bash(node -e \"const pkg = require\\(''tailwindcss/package.json''\\); console.log\\(''Tailwind version:'', pkg.version\\)\")",
+      "Bash(node -e \"const cfg = require\\(''./node_modules/next/dist/server/config-shared.js''\\); console.log\\(JSON.stringify\\(Object.keys\\(cfg\\)\\)\\)\")",
+      "Bash(npx tsc --noEmit --pretty src/app/office/manage/page.tsx)",
+      "Bash(npx next lint --file src/app/office/manage/page.tsx)",
+      "Bash(npx next build --no-lint)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx next build)"
+    ]
+  }
+}

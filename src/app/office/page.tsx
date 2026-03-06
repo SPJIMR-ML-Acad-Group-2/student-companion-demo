@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Card } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 
 interface DivisionSummary {
   divisionId: number; divisionName: string; divisionType: string; batchId: number | null;
@@ -49,7 +53,7 @@ export default function OfficeDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="rounded-full border-2 border-t-white animate-spin" style={{ width: 40, height: 40, borderColor: "rgba(255,255,255,0.3)", borderTopColor: "white" }} />
+        <Spinner size={40} />
       </div>
     );
   }
@@ -78,15 +82,14 @@ export default function OfficeDashboard() {
       {/* Header */}
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h1 className="text-3xl font-bold mb-1" style={{ color: "var(--color-text-primary)" }}>Programme Office Dashboard</h1>
-          <p className="text-base" style={{ color: "var(--color-text-secondary)" }}>Overview of attendance, sessions, and programme health</p>
+          <h1 className="text-3xl font-bold mb-1 text-[var(--color-text-primary)]">Programme Office Dashboard</h1>
+          <p className="text-base text-[var(--color-text-secondary)]">Overview of attendance, sessions, and programme health</p>
         </div>
         {uniqueBatches.length > 0 && (
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-muted)" }}>Batch:</span>
+            <span className="text-sm font-medium text-[var(--color-text-muted)]">Batch:</span>
             <select
-              className="tw-input"
-              style={{ minWidth: 200, padding: "8px 12px" }}
+              className="tw-input min-w-[200px] px-3 py-2"
               value={selectedBatchId}
               onChange={e => setSelectedBatchId(e.target.value)}
             >
@@ -98,18 +101,17 @@ export default function OfficeDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 mb-8" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))" }}>
+      <div className="grid gap-4 mb-8 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
         {[
           { label: "Total Students",         value: totalStudents,  sub: `Across ${filtered.length} batch${filtered.length !== 1 ? "es" : ""}` },
           { label: "Sessions Conducted",     value: totalSessions,  sub: null },
           { label: "Low Attendance Alerts",  value: allLow.length,  sub: null, danger: allLow.length > 0 },
         ].map(({ label, value, sub, danger }) => (
-          <div key={label} className="rounded-2xl p-5 border transition-all hover:-translate-y-0.5"
-            style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border)" }}>
-            <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "var(--color-text-muted)" }}>{label}</div>
-            <div className="text-3xl font-bold" style={{ color: danger ? "var(--color-danger)" : "var(--color-text-primary)" }}>{value}</div>
-            {sub && <div className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>{sub}</div>}
-          </div>
+          <Card key={label} padding="p-5" className="transition-all hover:-translate-y-0.5">
+            <div className="text-xs uppercase tracking-widest mb-2 text-[var(--color-text-muted)]">{label}</div>
+            <div className={`text-3xl font-bold ${danger ? "text-[var(--color-danger)]" : "text-[var(--color-text-primary)]"}`}>{value}</div>
+            {sub && <div className="text-xs mt-1 text-[var(--color-text-secondary)]">{sub}</div>}
+          </Card>
         ))}
       </div>
 
@@ -117,9 +119,9 @@ export default function OfficeDashboard() {
       {filtered.map((prog, pi) => (
         <div key={`${prog.programmeId}-${prog.batch?.id}`} className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
               {prog.programmeName}{" "}
-              <span className="text-sm" style={{ color: "var(--color-accent-sec)" }}>({prog.programmeCode})</span>
+              <span className="text-sm text-[var(--color-accent-sec)]">({prog.programmeCode})</span>
               {" "}— Core Divisions
             </h2>
             {prog.batch && <span className="badge-success">{prog.batch.name} · {prog.batch.activeTerm || "No active term"}</span>}
@@ -134,16 +136,16 @@ export default function OfficeDashboard() {
       {filteredSpecs.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold" style={{ color: "var(--color-text-primary)" }}>Specialisation Divisions</h2>
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Specialisation Divisions</h2>
           </div>
           <div className="space-y-8">
             {filteredSpecs.map((spec, si) => (
               <div key={spec.id} className="mb-4">
-                <h3 className="text-base font-semibold mb-4 border-b pb-2" style={{ borderColor: 'var(--color-border)' }}>
-                  <span style={{ color: "var(--color-text-primary)" }}>{spec.name}</span>{" "}
-                  <span className="text-sm" style={{ color: "var(--color-accent-sec)" }}>({spec.code})</span>
+                <h3 className="text-base font-semibold mb-4 border-b border-[var(--color-border)] pb-2">
+                  <span className="text-[var(--color-text-primary)]">{spec.name}</span>{" "}
+                  <span className="text-sm text-[var(--color-accent-sec)]">({spec.code})</span>
                 </h3>
-                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+                <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
                   {spec.divisions.map((div, di) => (
                     <CompactDivisionCard key={div.divisionId} div={div} delay={(si * 2 + di) * 0.1} onViewLowAttendance={setLowModal} />
                   ))}
@@ -156,9 +158,9 @@ export default function OfficeDashboard() {
 
       {/* Recent Sessions */}
       {recentSessions.length > 0 && (
-        <div className="rounded-2xl border overflow-hidden" style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border)" }}>
-          <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-            <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>📋 Recent Sessions</h3>
+        <Card padding="p-0" className="overflow-hidden">
+          <div className="px-5 py-4 border-b border-[var(--color-border)]">
+            <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Recent Sessions</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="tw-table">
@@ -166,53 +168,50 @@ export default function OfficeDashboard() {
               <tbody>
                 {recentSessions.map(s => (
                   <tr key={s.id}>
-                    <td style={{ color: "var(--color-text-primary)" }}>{s.date}</td>
-                    <td style={{ color: "var(--color-text-secondary)" }}>Slot {s.slot}</td>
-                    <td><strong style={{ color: "var(--color-text-primary)" }}>{s.course}</strong></td>
-                    <td style={{ color: "var(--color-text-secondary)" }}>{s.division}</td>
+                    <td className="text-[var(--color-text-primary)]">{s.date}</td>
+                    <td className="text-[var(--color-text-secondary)]">Slot {s.slot}</td>
+                    <td><strong className="text-[var(--color-text-primary)]">{s.course}</strong></td>
+                    <td className="text-[var(--color-text-secondary)]">{s.division}</td>
                     <td><span className={s.divisionType === "core" ? "badge-success" : "badge-warning"}>{s.divisionType}</span></td>
-                    <td style={{ color: "var(--color-text-secondary)" }}>{s.attendanceCount}</td>
+                    <td className="text-[var(--color-text-secondary)]">{s.attendanceCount}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Low Attendance Modal */}
-      {lowModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.6)" }} onClick={() => setLowModal(null)}>
-          <div className="rounded-2xl w-full max-w-lg mx-4 flex flex-col" style={{ background: "var(--color-bg-secondary)", maxHeight: "85vh" }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-              <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>Low Attendance Alerts</h2>
-              <button className="text-xl cursor-pointer bg-transparent border-0" style={{ color: "var(--color-text-muted)" }} onClick={() => setLowModal(null)}>✕</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <p className="text-sm mb-4" style={{ color: "var(--color-text-muted)" }}>{lowModal.courseName}</p>
-              <table className="tw-table">
-                <thead><tr><th>Roll Number</th><th>Name</th><th>Attendance %</th></tr></thead>
-                <tbody>
-                  {lowModal.students.map((st, i) => (
-                    <tr key={i}>
-                      <td className="font-medium" style={{ color: "var(--color-text-primary)" }}>{st.rollNumber}</td>
-                      <td style={{ color: "var(--color-text-secondary)" }}>{st.name}</td>
-                      <td><span className={st.percentage >= 75 ? "badge-warning" : "badge-danger"}>{st.percentage}%</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="px-6 py-4 border-t flex justify-end" style={{ borderColor: "var(--color-border)" }}>
-              <button
-                onClick={() => setLowModal(null)}
-                className="px-5 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors"
-                style={{ background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)", fontFamily: "inherit" }}
-              >Close</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={!!lowModal}
+        onClose={() => setLowModal(null)}
+        title="Low Attendance Alerts"
+        maxWidth="max-w-lg"
+        footer={
+          <Button variant="secondary" size="md" onClick={() => setLowModal(null)}>
+            Close
+          </Button>
+        }
+      >
+        {lowModal && (
+          <>
+            <p className="text-sm mb-4 text-[var(--color-text-muted)]">{lowModal.courseName}</p>
+            <table className="tw-table">
+              <thead><tr><th>Roll Number</th><th>Name</th><th>Attendance %</th></tr></thead>
+              <tbody>
+                {lowModal.students.map((st, i) => (
+                  <tr key={i}>
+                    <td className="font-medium text-[var(--color-text-primary)]">{st.rollNumber}</td>
+                    <td className="text-[var(--color-text-secondary)]">{st.name}</td>
+                    <td><span className={st.percentage >= 75 ? "badge-warning" : "badge-danger"}>{st.percentage}%</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -222,11 +221,11 @@ function DivisionCard({ div, delay, onViewLowAttendance }: {
   onViewLowAttendance: (data: { courseName: string; students: DivisionSummary["courses"][0]["lowAttendanceStudents"] }) => void;
 }) {
   return (
-    <div className="rounded-2xl border p-6 mb-5" style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border)", animationDelay: `${delay}s` }}>
+    <Card padding="p-6" className="mb-5" style={{ animationDelay: `${delay}s` }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>Division {div.divisionName}</div>
-          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>{div.displayStudentCount ?? div.studentCount} students · {div.totalSessions} sessions</div>
+          <div className="text-lg font-semibold text-[var(--color-text-primary)]">Division {div.divisionName}</div>
+          <div className="text-sm text-[var(--color-text-muted)]">{div.displayStudentCount ?? div.studentCount} students · {div.totalSessions} sessions</div>
         </div>
       </div>
       {div.courses.some(c => c.totalSessions > 0) ? (
@@ -239,12 +238,12 @@ function DivisionCard({ div, delay, onViewLowAttendance }: {
               {div.courses.filter(c => c.totalSessions > 0).map(course => (
                 <tr key={course.courseId}>
                   <td>
-                    <strong style={{ color: "var(--color-text-primary)" }}>{course.courseCode}</strong>
-                    <br /><span className="text-xs" style={{ color: "var(--color-text-muted)" }}>{course.courseName}</span>
+                    <strong className="text-[var(--color-text-primary)]">{course.courseCode}</strong>
+                    <br /><span className="text-xs text-[var(--color-text-muted)]">{course.courseName}</span>
                   </td>
                   <td><span className={course.courseType === "core" ? "badge-success" : "badge-warning"}>{course.courseType}</span></td>
-                  <td style={{ color: "var(--color-text-secondary)" }}>{course.credits}</td>
-                  <td style={{ color: "var(--color-text-secondary)" }}>{course.totalSessions}</td>
+                  <td className="text-[var(--color-text-secondary)]">{course.credits}</td>
+                  <td className="text-[var(--color-text-secondary)]">{course.totalSessions}</td>
                   <td>
                     <span className={course.avgAttendance >= 85 ? "badge-success" : course.avgAttendance >= 75 ? "badge-warning" : "badge-danger"}>
                       {course.avgAttendance}%
@@ -252,15 +251,15 @@ function DivisionCard({ div, delay, onViewLowAttendance }: {
                   </td>
                   <td>
                     {course.lowAttendanceStudents.length === 0
-                      ? <span className="text-sm" style={{ color: "var(--color-text-muted)" }}>None</span>
+                      ? <span className="text-sm text-[var(--color-text-muted)]">None</span>
                       : (
-                        <button
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => onViewLowAttendance({ courseName: course.courseName, students: course.lowAttendanceStudents })}
-                          className="px-2 py-1 rounded text-xs cursor-pointer transition-colors"
-                          style={{ background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)", fontFamily: "inherit" }}
                         >
                           {course.lowAttendanceStudents.length} Students
-                        </button>
+                        </Button>
                       )
                     }
                   </td>
@@ -269,8 +268,8 @@ function DivisionCard({ div, delay, onViewLowAttendance }: {
             </tbody>
           </table>
         </div>
-      ) : <p className="text-sm" style={{ color: "var(--color-text-muted)", padding: "8px 0" }}>No sessions yet.</p>}
-    </div>
+      ) : <p className="text-sm text-[var(--color-text-muted)] py-2">No sessions yet.</p>}
+    </Card>
   );
 }
 
@@ -279,29 +278,29 @@ function CompactDivisionCard({ div, delay, onViewLowAttendance }: {
   onViewLowAttendance: (data: { courseName: string; students: DivisionSummary["courses"][0]["lowAttendanceStudents"] }) => void;
 }) {
   return (
-    <div className="rounded-2xl border p-5 transition-all hover:-translate-y-1 hover:shadow-lg" style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border)", animationDelay: `${delay}s` }}>
+    <Card padding="p-5" className="transition-all hover:-translate-y-1 hover:shadow-lg" style={{ animationDelay: `${delay}s` }}>
       <div className="flex justify-between items-start mb-4">
         <div>
-          <div className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>{div.divisionName}</div>
-          <div className="text-xs font-semibold uppercase tracking-wider mt-1" style={{ color: "var(--color-accent-sec)" }}>Division</div>
+          <div className="text-2xl font-bold text-[var(--color-text-primary)]">{div.divisionName}</div>
+          <div className="text-xs font-semibold uppercase tracking-wider mt-1 text-[var(--color-accent-sec)]">Division</div>
         </div>
         <div className="text-right">
-          <div className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>{div.displayStudentCount ?? div.studentCount}</div>
-          <div className="text-xs" style={{ color: "var(--color-text-muted)" }}>Students</div>
+          <div className="text-lg font-bold text-[var(--color-text-primary)]">{div.displayStudentCount ?? div.studentCount}</div>
+          <div className="text-xs text-[var(--color-text-muted)]">Students</div>
         </div>
       </div>
-      
-      <div className="flex items-center justify-between mb-4 p-3 rounded-xl" style={{ background: "var(--color-bg-secondary)" }}>
-        <div className="text-sm font-medium" style={{ color: "var(--color-text-secondary)" }}>Sessions Conducted</div>
-        <div className="text-base font-bold" style={{ color: "var(--color-text-primary)" }}>{div.totalSessions}</div>
+
+      <div className="flex items-center justify-between mb-4 p-3 rounded-xl bg-[var(--color-bg-secondary)]">
+        <div className="text-sm font-medium text-[var(--color-text-secondary)]">Sessions Conducted</div>
+        <div className="text-base font-bold text-[var(--color-text-primary)]">{div.totalSessions}</div>
       </div>
 
       <div className="space-y-3 mt-4">
         {div.courses.slice(0, 3).map(c => {
           const hasAlerts = c.lowAttendanceStudents.length > 0;
           return (
-           <div key={c.courseId} className="flex justify-between items-center text-sm border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
-             <span className="truncate font-medium pr-2 max-w-[120px]" style={{ color: "var(--color-text-primary)" }} title={c.courseName}>{c.courseCode}</span>
+           <div key={c.courseId} className="flex justify-between items-center text-sm border-t border-[var(--color-border)] pt-3">
+             <span className="truncate font-medium pr-2 max-w-[120px] text-[var(--color-text-primary)]" title={c.courseName}>{c.courseCode}</span>
              <div className="flex items-center gap-3">
                <span className={`font-bold ${c.avgAttendance >= 85 ? 'text-green-500' : c.avgAttendance >= 75 ? 'text-yellow-500' : 'text-red-500'}`}>{c.avgAttendance}%</span>
                {hasAlerts && (
@@ -318,9 +317,9 @@ function CompactDivisionCard({ div, delay, onViewLowAttendance }: {
           )
         })}
         {div.courses.length === 0 && (
-          <div className="text-xs text-center italic py-2" style={{ color: "var(--color-text-muted)" }}>No active courses</div>
+          <div className="text-xs text-center italic py-2 text-[var(--color-text-muted)]">No active courses</div>
         )}
       </div>
-    </div>
+    </Card>
   )
 }

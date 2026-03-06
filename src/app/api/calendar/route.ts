@@ -64,9 +64,10 @@ export async function GET(req: Request) {
     const timetableEntries = await prisma.timetable.findMany({
       where: { divisionId: { in: divisionIds }, date: { in: weekDates } },
       include: { 
-        course: true, 
-        division: true, 
+        course: true,
+        division: true,
         faculty: true,
+        room: true,
         attendance: role === "student" ? { where: { studentId: user.userId } } : { select: { id: true, status: true } },
         _count: { select: { attendance: true } }
       },
@@ -98,6 +99,7 @@ export async function GET(req: Request) {
             sessionNumber: entry.sessionNumber || null,
             attendance: entry.attendance || [],
             noSwipes: entry.isConducted ? entry._count.attendance === 0 : false,
+            roomName: entry.room?.name || null,
           };
         }),
       };

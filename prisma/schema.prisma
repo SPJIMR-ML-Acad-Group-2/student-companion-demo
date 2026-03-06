@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
+  url = "file:./dev.db"
   // directUrl = env("DIRECT_URL")
 }
 
@@ -144,6 +144,7 @@ model Timetable {
   divisionId    Int
   courseId      Int
   facultyId     Int?
+  roomId        Int?
   date          String // YYYY-MM-DD (specific date — timetable changes weekly)
   slotNumber    Int // 1-8 (fixed slots)
   startTime     String // from FIXED_SLOTS
@@ -153,9 +154,18 @@ model Timetable {
   division      Division     @relation(fields: [divisionId], references: [id])
   course        Course       @relation(fields: [courseId], references: [id])
   faculty       Faculty?     @relation(fields: [facultyId], references: [id])
+  room          Room?        @relation(fields: [roomId], references: [id])
   attendance    Attendance[]
 
   @@unique([divisionId, date, slotNumber])
+}
+
+// ─── Rooms ───────────────────────────────────────────
+
+model Room {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique // e.g. "LT-1", "Room 101", "Amphitheatre"
+  timetable Timetable[]
 }
 
 // ─── Attendance ────────────────────────────────────────
@@ -166,6 +176,7 @@ model Attendance {
   studentId   Int
   status      String // P | AB | LT | P# (sanctioned leave)
   swipeTime   String? // HH:mm:ss
+  remarks     String? // reason for manual status change
   timetable   Timetable @relation(fields: [timetableId], references: [id])
   student     User      @relation(fields: [studentId], references: [id])
   createdAt   DateTime  @default(now())

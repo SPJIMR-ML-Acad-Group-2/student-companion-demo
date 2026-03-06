@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
       division: { include: { batch: { include: { programme: true } }, specialisation: true } },
       course: true,
       faculty: true,
+      room: true,
     },
     orderBy: [{ divisionId: "asc" }, { date: "asc" }, { slotNumber: "asc" }],
   });
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { divisionId, courseId, facultyId, date, slotNumber } = body;
+  const { divisionId, courseId, facultyId, date, slotNumber, roomId } = body;
   if (!divisionId || !courseId || !date || !slotNumber) {
     return NextResponse.json({ error: "divisionId, courseId, date, slotNumber required" }, { status: 400 });
   }
@@ -77,8 +78,9 @@ export async function POST(req: NextRequest) {
         date, slotNumber: parseInt(slotNumber),
         startTime: slotDef.startTime, endTime: slotDef.endTime,
         facultyId: facultyId ? parseInt(facultyId) : null,
+        roomId: roomId ? parseInt(roomId) : null,
       },
-      include: { division: true, course: true, faculty: true },
+      include: { division: true, course: true, faculty: true, room: true },
     });
     return NextResponse.json(entry, { status: 201 });
   } catch (err: unknown) {

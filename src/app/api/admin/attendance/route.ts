@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
       attendanceId: att?.id    || null,
       status:       att?.status || "None",
       swipeTime:    att?.swipeTime || null,
+      remarks:      att?.remarks || null,
     };
   });
 
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { sessionId, studentId, status } = body;
+  const { sessionId, studentId, status, remarks } = body;
   if (!sessionId || !studentId || !status) {
     return NextResponse.json({ error: "sessionId, studentId, status required" }, { status: 400 });
   }
@@ -54,8 +55,8 @@ export async function POST(req: NextRequest) {
   try {
     const att = await prisma.attendance.upsert({
       where: { timetableId_studentId: { timetableId: parseInt(sessionId), studentId: parseInt(studentId) } },
-      update: { status },
-      create: { timetableId: parseInt(sessionId), studentId: parseInt(studentId), status },
+      update: { status, ...(remarks !== undefined ? { remarks } : {}) },
+      create: { timetableId: parseInt(sessionId), studentId: parseInt(studentId), status, remarks: remarks || null },
     });
 
     await prisma.timetable.update({
