@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Spinner } from "@/components/ui/Spinner";
-import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
 
 const FIXED_SLOTS = [
   { slot: 1, label: "8:15–9:00"   }, { slot: 2, label: "9:00–10:10"  },

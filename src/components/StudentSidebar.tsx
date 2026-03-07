@@ -2,15 +2,21 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "./ThemeToggle";
+import {
+  ChartBarIcon,
+  CalendarDaysIcon,
+  BookOpenIcon,
+  ArrowLeftStartOnRectangleIcon,
+} from "@heroicons/react/24/outline";
 
 const NAV = [
-  { href: "/student", icon: "📊", label: "Attendance" },
-  { href: "/student/calendar", icon: "📅", label: "Calendar" },
+  { href: "/student",          Icon: ChartBarIcon,      label: "Attendance" },
+  { href: "/student/calendar", Icon: CalendarDaysIcon,  label: "Calendar"   },
 ];
 
 export default function StudentSidebar({ userName }: { userName: string }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
 
   const handleLogout = async () => {
     await fetch("/api/auth/me", { method: "DELETE" });
@@ -18,23 +24,27 @@ export default function StudentSidebar({ userName }: { userName: string }) {
   };
 
   return (
-    <aside className="fixed top-0 left-0 bottom-0 z-10 flex flex-col w-[260px] bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] px-4 py-6">
+    <aside
+      className="fixed top-0 left-0 bottom-0 z-10 flex flex-col bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] px-4 py-6"
+      style={{ width: "260px" }}
+    >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-2 mb-8">
         <div
-          className="flex items-center justify-center text-lg shrink-0 w-9 h-9 rounded-[10px]"
+          className="flex items-center justify-center shrink-0 w-9 h-9 rounded-xl"
           style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
         >
-          📚
+          <BookOpenIcon className="w-5 h-5 text-white" />
         </div>
-        <h2 className="text-base font-bold text-[var(--color-text-primary)]">
-          Classroom Companion
+        <h2 className="text-sm font-bold text-[var(--color-text-primary)] leading-tight">
+          Classroom<br />
+          <span className="font-normal text-[var(--color-text-muted)]">Companion</span>
         </h2>
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-col gap-1 flex-1">
-        {NAV.map(({ href, icon, label }) => {
+      <nav className="flex flex-col gap-0.5 flex-1">
+        {NAV.map(({ href, Icon, label }) => {
           const active =
             pathname === href ||
             (href !== "/student" && pathname.startsWith(href));
@@ -42,13 +52,13 @@ export default function StudentSidebar({ userName }: { userName: string }) {
             <a
               key={href}
               href={href}
-              className={`flex items-center gap-2.5 px-3 py-2.5 rounded text-sm font-medium transition-colors no-underline ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors no-underline ${
                 active
-                  ? "text-[var(--color-accent-sec)] bg-[var(--color-accent-glow)]"
+                  ? "text-white bg-[#531f75]"
                   : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-card)] hover:text-[var(--color-text-primary)]"
               }`}
             >
-              <span className="text-lg w-6 text-center shrink-0">{icon}</span>
+              <Icon style={{ width: "18px", height: "18px" }} className="shrink-0" />
               {label}
             </a>
           );
@@ -60,24 +70,28 @@ export default function StudentSidebar({ userName }: { userName: string }) {
         <ThemeToggle />
       </div>
 
-      {/* User */}
+      {/* User footer */}
       <div className="flex items-center gap-2.5 pt-4 border-t border-[var(--color-border)]">
-        <div className="flex items-center justify-center text-sm font-semibold text-white shrink-0 w-9 h-9 rounded-full bg-linear-to-br from-indigo-500 to-violet-500">
+        <div
+          className="flex items-center justify-center text-sm font-bold text-white shrink-0 w-9 h-9 rounded-full"
+          style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
+        >
           {userName[0]}
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold truncate text-[var(--color-text-primary)]">
             {userName}
           </div>
-          <div className="text-[11px] uppercase tracking-widest text-[var(--color-text-muted)]">
+          <div className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
             Student
           </div>
         </div>
         <button
           onClick={handleLogout}
-          className="px-2.5 py-1.5 text-xs rounded cursor-pointer transition-colors shrink-0 bg-[var(--color-bg-card)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent)]"
+          title="Sign out"
+          className="p-1.5 rounded-lg cursor-pointer transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-bg)]"
         >
-          ↩
+          <ArrowLeftStartOnRectangleIcon style={{ width: "16px", height: "16px" }} />
         </button>
       </div>
     </aside>

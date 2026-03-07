@@ -1,9 +1,21 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { Spinner } from "@/components/ui/Spinner";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
+import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/datepicker";
+import {
+  ArrowUpTrayIcon, ChartBarIcon, PencilIcon, DocumentArrowDownIcon,
+} from "@heroicons/react/24/outline";
 
 function parseCSVPreview(text: string): string[][] {
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
@@ -44,6 +56,8 @@ export default function OfficeAttendance() {
   const [selectedSession, setSelectedSession] = useState<CalendarSlot | null>(null);
   const [attRecords, setAttRecords]   = useState<any[]>([]);
   const [editingRemarks, setEditingRemarks] = useState<Record<number, string>>({});
+  const [dialogFilterSearch, setDialogFilterSearch] = useState("");
+  const [dialogFilterStatus, setDialogFilterStatus] = useState("__all__");
 
   const [reportStartDate, setReportStartDate] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split("T")[0];
@@ -102,6 +116,7 @@ export default function OfficeAttendance() {
   const openAttendance = async (slot: CalendarSlot) => {
     if (!slot.sessionId) return;
     setSelectedSession(slot); setAttRecords([]); setEditingRemarks({});
+    setDialogFilterSearch(""); setDialogFilterStatus("__all__");
     const res = await fetch(`/api/admin/attendance?sessionId=${slot.sessionId}`);
     if (res.ok) {
       const data = await res.json();
@@ -127,7 +142,7 @@ export default function OfficeAttendance() {
     const record = attRecords.find(r => r.studentId === studentId);
     if (!record || !selectedSession?.sessionId || record.status === "None") return;
     const remarks = editingRemarks[studentId] || null;
-    if (remarks === (record.remarks || null)) return; // no change
+    if (remarks === (record.remarks || null)) return;
     setAttRecords(prev => prev.map(r => r.studentId === studentId ? { ...r, remarks } : r));
     await fetch("/api/admin/attendance", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -164,6 +179,24 @@ export default function OfficeAttendance() {
 
   const today = new Date().toISOString().split("T")[0];
 
+  const statusColors: Record<string, string> = {
+    P: "text-green-500 border-green-500/40 bg-green-500/10",
+    "P#": "text-blue-400 border-blue-400/40 bg-blue-400/10",
+    LT: "text-yellow-500 border-yellow-500/40 bg-yellow-500/10",
+    AB: "text-red-500 border-red-500/40 bg-red-500/10",
+  };
+
+  const filteredAttRecords = attRecords.filter(r => {
+    if (dialogFilterSearch) {
+      const s = dialogFilterSearch.toLowerCase();
+      if (!r.rollNumber?.toLowerCase().includes(s) && !r.studentName?.toLowerCase().includes(s)) return false;
+    }
+    if (dialogFilterStatus !== "__all__") {
+      if (r.status !== dialogFilterStatus) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="relative z-[1]">
       {/* Header */}
@@ -174,7 +207,9 @@ export default function OfficeAttendance() {
 
       {/* ── Upload Section ── */}
       <div className="mb-10">
-        <h2 className="text-lg font-semibold mb-4 text-[var(--color-text-primary)]">📤 Upload Biometric Log</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold mb-4 text-[var(--color-text-primary)]">
+          <ArrowUpTrayIcon className="w-5 h-5 text-[#531f75]" /> Upload Biometric Log
+        </h2>
 
         {!selectedFile && !uploading && !uploadResults && (
           <div
@@ -184,13 +219,13 @@ export default function OfficeAttendance() {
             onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
             className={`rounded-2xl border-2 border-dashed p-12 text-center cursor-pointer transition-all ${
               dragOver
-                ? "border-[var(--color-accent)] bg-[var(--color-accent-glow)]"
+                ? "border-[#531f75] bg-[#531f75]/10"
                 : "border-[var(--color-border)] bg-[var(--color-bg-card)]"
             }`}
           >
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; }} />
-            <div className="text-5xl mb-4">📁</div>
+            <ArrowUpTrayIcon className="w-12 h-12 mx-auto mb-4 text-[var(--color-text-muted)]" />
             <div className="text-base font-semibold mb-1 text-[var(--color-text-primary)]">Drop Excel/CSV file here or click to upload</div>
             <div className="text-sm text-[var(--color-text-muted)]">Supports .xlsx (primary) and pipe-delimited .csv</div>
           </div>
@@ -198,9 +233,7 @@ export default function OfficeAttendance() {
 
         {uploading && (
           <div className="rounded-2xl border-2 border-dashed p-12 text-center border-[var(--color-border)] bg-[var(--color-bg-card)]">
-            <div className="flex justify-center mb-4">
-              <Spinner size={48} />
-            </div>
+            <div className="flex justify-center mb-4"><Spinner size={48} /></div>
             <div className="text-base font-semibold text-[var(--color-text-primary)]">Processing...</div>
             <div className="text-sm mt-1 text-[var(--color-text-muted)]">Mapping swipes to timetable slots</div>
           </div>
@@ -214,36 +247,36 @@ export default function OfficeAttendance() {
                 <p className="text-sm mt-1 text-[var(--color-text-muted)]">Showing first few rows. Please confirm format is correct.</p>
               </div>
               <div className="flex gap-3">
-                <Button variant="secondary" onClick={() => { setSelectedFile(null); setPreviewData(null); }}>Cancel</Button>
-                <Button variant="primary" onClick={confirmUpload}>Confirm & Upload</Button>
+                <Button variant="outline" onClick={() => { setSelectedFile(null); setPreviewData(null); }}>Cancel</Button>
+                <Button className="bg-[#531f75] hover:bg-[#531f75]/90" onClick={confirmUpload}>Confirm & Upload</Button>
               </div>
             </div>
             <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
-              <table className="tw-table">
-                <tbody>
+              <Table>
+                <TableBody>
                   {previewData.map((row, i) => (
-                    <tr key={i} className={i === 0 ? "bg-[var(--color-bg-secondary)] font-semibold" : ""}>
-                      {row.map((cell, j) => <td key={j}>{cell}</td>)}
-                    </tr>
+                    <TableRow key={i} className={i === 0 ? "bg-[var(--color-bg-secondary)] font-semibold" : ""}>
+                      {row.map((cell, j) => <TableCell key={j}>{cell}</TableCell>)}
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}
 
         {uploadResults && (
           <div className="rounded-2xl border p-5 relative bg-[var(--color-bg-card)] border-[var(--color-border)]">
-            <button onClick={() => setUploadResults(null)}
-              className="absolute top-4 right-4 bg-transparent border-0 cursor-pointer text-lg text-[var(--color-text-muted)]">✕</button>
-            <h3 className="text-base font-semibold mb-4 text-[var(--color-text-primary)]">✅ Upload Processed Successfully</h3>
+            <Button variant="ghost" size="icon-sm" onClick={() => setUploadResults(null)}
+              className="absolute top-4 right-4 text-[var(--color-text-muted)]">✕</Button>
+            <h3 className="text-base font-semibold mb-4 text-green-500">Upload Processed Successfully</h3>
             <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(120px,1fr))]">
               {[
-                { v: uploadResults.totalSwipes,       l: "Total Swipes",     cls: "text-[var(--color-accent-sec)]" },
-                { v: uploadResults.sessionsCreated,   l: "Sessions Created", cls: "text-[var(--color-accent-sec)]" },
-                { v: uploadResults.attendanceMarked,  l: "Present",          cls: "text-[var(--color-success)]" },
-                { v: uploadResults.lateMarked,        l: "Late",             cls: "text-[var(--color-warning)]" },
-                { v: uploadResults.absentMarked,      l: "Absent",           cls: "text-[var(--color-danger)]" },
+                { v: uploadResults.totalSwipes,       l: "Total Swipes",     cls: "text-[#8b5cf6]" },
+                { v: uploadResults.sessionsCreated,   l: "Sessions Created", cls: "text-[#8b5cf6]" },
+                { v: uploadResults.attendanceMarked,  l: "Present",          cls: "text-green-500" },
+                { v: uploadResults.lateMarked,        l: "Late",             cls: "text-yellow-500" },
+                { v: uploadResults.absentMarked,      l: "Absent",           cls: "text-red-500" },
                 { v: uploadResults.duplicatesSkipped, l: "Duplicates",       cls: "text-[var(--color-text-muted)]" },
               ].map(({ v, l, cls }) => (
                 <div key={l} className="p-3 rounded-lg text-center bg-[var(--color-bg-secondary)]">
@@ -253,7 +286,7 @@ export default function OfficeAttendance() {
               ))}
             </div>
             {uploadResults.studentsNotFound > 0 && (
-              <p className="mt-3 text-xs text-[var(--color-warning)]">⚠️ {uploadResults.studentsNotFound} roll numbers not found</p>
+              <p className="mt-3 text-xs text-yellow-500">⚠️ {uploadResults.studentsNotFound} roll numbers not found</p>
             )}
           </div>
         )}
@@ -261,32 +294,41 @@ export default function OfficeAttendance() {
 
       {/* ── Report Download Section ── */}
       <div className="mb-10 border-t border-[var(--color-border)] pt-6">
-        <h2 className="text-lg font-semibold mb-1 text-[var(--color-text-primary)]">📊 Download Attendance Report</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold mb-1 text-[var(--color-text-primary)]">
+          <ChartBarIcon className="w-5 h-5 text-[#531f75]" /> Download Attendance Report
+        </h2>
         <p className="text-sm mb-4 text-[var(--color-text-secondary)]">Export attendance records as CSV with optional filters.</p>
         <div className="flex gap-3 flex-wrap items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-[var(--color-text-muted)]">From</label>
-            <input type="date" className="tw-input" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
+            <DatePicker value={reportStartDate} onChange={setReportStartDate} placeholder="Start date" className="w-[160px]" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-[var(--color-text-muted)]">To</label>
-            <input type="date" className="tw-input" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
+            <DatePicker value={reportEndDate} onChange={setReportEndDate} placeholder="End date" className="w-[160px]" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-[var(--color-text-muted)]">Division</label>
-            <select className="tw-input w-[180px]" value={reportDivisionId} onChange={e => setReportDivisionId(e.target.value)}>
-              <option value="">All Divisions</option>
-              {calData?.divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <Select value={reportDivisionId || "__all__"} onValueChange={v => setReportDivisionId(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="w-[180px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Divisions" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Divisions</SelectItem>
+                {calData?.divisions.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-[var(--color-text-muted)]">Course</label>
-            <select className="tw-input w-[240px]" value={reportCourseId} onChange={e => setReportCourseId(e.target.value)}>
-              <option value="">All Courses</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-            </select>
+            <Select value={reportCourseId || "__all__"} onValueChange={v => setReportCourseId(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="w-[240px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Courses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Courses</SelectItem>
+                {courses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.code} — {c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <Button variant="primary" onClick={downloadReport} disabled={reportLoading}>
+          <Button className="gap-2 bg-[#531f75] hover:bg-[#531f75]/90" onClick={downloadReport} disabled={reportLoading}>
+            <DocumentArrowDownIcon className="w-4 h-4" />
             {reportLoading ? "Generating…" : "Download CSV"}
           </Button>
         </div>
@@ -297,22 +339,25 @@ export default function OfficeAttendance() {
         <>
           <div className="flex justify-between items-start border-t border-[var(--color-border)] pt-6 mb-4 flex-wrap gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">✏️ Manual Update via Calendar</h2>
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-[var(--color-text-primary)]">
+                <PencilIcon className="w-5 h-5 text-[#531f75]" /> Manual Update via Calendar
+              </h2>
               <p className="text-sm mt-1 text-[var(--color-text-secondary)]">Click any session to mark or adjust attendance.</p>
             </div>
             <div className="flex gap-2 items-center flex-wrap">
-              <select className="tw-input w-[180px]" value={filterDiv} onChange={e => handleDivChange(e.target.value)}>
-                <option value="">All Divisions</option>
-                {calData.divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              <div className="flex items-center gap-1 rounded-lg p-1 bg-[var(--color-bg-secondary)]">
-                <button onClick={() => handleWeekChange(-1)}
-                  className="px-3 py-1.5 text-xs rounded cursor-pointer bg-transparent border-none text-[var(--color-text-secondary)] font-[inherit]">←</button>
-                <span className="px-2 text-sm font-medium text-[var(--color-text-primary)]">{calData.weekDates[0]} → {calData.weekDates[6]}</span>
-                <button onClick={() => handleWeekChange(1)}
-                  className="px-3 py-1.5 text-xs rounded cursor-pointer bg-transparent border-none text-[var(--color-text-secondary)] font-[inherit]">→</button>
+              <Select value={filterDiv || "__all__"} onValueChange={v => handleDivChange(v === "__all__" ? "" : v)}>
+                <SelectTrigger className="w-[180px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Divisions" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Divisions</SelectItem>
+                  {calData.divisions.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" onClick={() => handleWeekChange(-1)}>← Prev</Button>
+                <span className="px-3 text-sm font-medium text-[var(--color-text-primary)] bg-[var(--color-bg-secondary)] rounded-[5px] h-7 flex items-center">{calData.weekDates[0]} – {calData.weekDates[calData.weekDates.length - 1]}</span>
+                <Button variant="outline" size="sm" onClick={() => handleWeekChange(1)}>Next →</Button>
               </div>
-              <Button variant="secondary" size="sm" onClick={() => { setWeekOffset(0); fetchCalendar(0, filterDiv); }}>Today</Button>
+              <Button variant="outline" size="sm" onClick={() => { setWeekOffset(0); fetchCalendar(0, filterDiv); }}>Today</Button>
             </div>
           </div>
 
@@ -322,8 +367,8 @@ export default function OfficeAttendance() {
               <div key={day.date}
                 className={`p-2 font-bold text-center rounded ${
                   day.date === today
-                    ? "text-[var(--color-accent-sec)] bg-[var(--color-accent-glow)]"
-                    : "text-[var(--color-text-primary)] bg-transparent"
+                    ? "text-[#8b5cf6] bg-[#531f75]/10"
+                    : "text-[var(--color-text-primary)]"
                 }`}>
                 {day.dayName}<br />
                 <span className="font-normal text-[var(--color-text-muted)]" style={{ fontSize: 11 }}>{day.date.slice(5)}</span>
@@ -350,23 +395,24 @@ export default function OfficeAttendance() {
                     <div key={`${day.date}-${st.slot}`}
                       onClick={() => { if (clickable) openAttendance({ ...slot, date: day.date }); }}
                       className="rounded bg-[var(--color-bg-secondary)] mt-0.5"
-                      style={{ padding: 6, borderTop: "1px solid varvar(--color-border)",
+                      style={{ padding: 6,
+                        borderTop: "1px solid var(--color-border)",
                         borderLeft: `3px solid var(${slot.courseType === "core" ? "--color-accent" : "--color-warning"})`,
                         cursor: clickable ? "pointer" : "default" }}>
                       <div className="font-bold text-[var(--color-text-primary)]">{slot.courseCode}</div>
                       <div className="truncate mt-0.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{slot.courseName}</div>
-                      <div className="mt-0.5 text-[var(--color-accent-sec)]" style={{ fontSize: 10 }}>
+                      <div className="mt-0.5 text-[#8b5cf6]" style={{ fontSize: 10 }}>
                         Div {slot.divisionName}{slot.facultyName && ` • ${slot.facultyName.split(" ")[1]}`}
                         {slot.roomName && ` • ${slot.roomName}`}
                       </div>
                       {hasAttendance ? (
                         <div className="flex gap-1.5 mt-2 font-medium" style={{ fontSize: 11 }}>
-                          <span className="text-[var(--color-success)]">{p} P</span>
-                          {ab > 0 && <span className="text-[var(--color-danger)]">{ab} AB</span>}
-                          {lt > 0 && <span className="text-[var(--color-warning)]">{lt} LT</span>}
+                          <span className="text-green-500">{p} P</span>
+                          {ab > 0 && <span className="text-red-500">{ab} AB</span>}
+                          {lt > 0 && <span className="text-yellow-500">{lt} LT</span>}
                         </div>
                       ) : (
-                        <div className="mt-1 font-semibold text-[var(--color-accent-sec)]" style={{ fontSize: 10 }}>Click to mark</div>
+                        <div className="mt-1 font-semibold text-[#8b5cf6]" style={{ fontSize: 10 }}>Click to mark</div>
                       )}
                     </div>
                   );
@@ -382,68 +428,98 @@ export default function OfficeAttendance() {
         </>
       )}
 
-      {/* ── Manual Attendance Modal ── */}
-      <Modal
-        open={!!selectedSession}
-        onClose={() => setSelectedSession(null)}
-        title="Manual Attendance Update"
-        subtitle={selectedSession ? `${selectedSession.date} · Slot ${selectedSession.slotNumber} · ${selectedSession.courseName} · Div ${selectedSession.divisionName}` : ""}
-        maxWidth="max-w-4xl"
-        footer={
-          <Button variant="secondary" onClick={() => setSelectedSession(null)}>Close</Button>
-        }
-      >
-        {attRecords.length === 0
-          ? <div className="flex justify-center py-10"><Spinner size={36} /></div>
-          : (
-            <table className="tw-table">
-              <thead><tr><th>Roll No.</th><th>Student</th><th>Swipe</th><th>Status</th><th>Remarks</th></tr></thead>
-              <tbody>
-                {attRecords.map(r => (
-                  <tr key={r.studentId}>
-                    <td className="text-[var(--color-text-primary)]">{r.rollNumber}</td>
-                    <td className="text-[var(--color-text-secondary)]">{r.studentName}</td>
-                    <td className="text-[var(--color-text-muted)]">{r.swipeTime || "—"}</td>
-                    <td>
-                      <div className="flex gap-1">
-                        {(["P","P#","LT","AB"] as const).map(s => {
-                          const active = r.status === s;
-                          const colVar = s==="P" ? "--color-success" : s==="AB" ? "--color-danger" : s==="LT" ? "--color-warning" : "--color-accent";
-                          return (
-                            <button key={s} onClick={() => updateAttendance(r.studentId, s)}
-                              className={`px-2 py-0.5 rounded cursor-pointer font-[inherit] ${
-                                active
-                                  ? `border border-[${colVar}] text-[${colVar}]`
-                                  : `border border-[var(--color-border)] text-[var(--color-text-muted)]`
-                              }`}
-                              style={{
-                                fontSize: 11,
-                                background: active ? `var(${colVar})22` : "transparent",
-                                borderColor: `var(${active ? colVar : "--color-border"})`,
-                                color: `var(${active ? colVar : "--color-text-muted"})`,
-                              }}>
-                              {s}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="tw-input px-2 py-1 text-[11px] w-[160px] min-w-[120px]"
-                        placeholder="Add remark..."
-                        value={editingRemarks[r.studentId] || ""}
-                        onChange={e => setEditingRemarks(prev => ({ ...prev, [r.studentId]: e.target.value }))}
-                        onBlur={() => saveRemarks(r.studentId)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-      </Modal>
+      {/* ── Manual Attendance Dialog ── */}
+      <Dialog open={!!selectedSession} onOpenChange={open => !open && setSelectedSession(null)}>
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] overflow-hidden bg-[var(--color-bg-card)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+          <DialogHeader>
+            <DialogTitle className="text-[var(--color-text-primary)]">Manual Attendance Update</DialogTitle>
+            {selectedSession && (
+              <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+                {selectedSession.date} · Slot {selectedSession.slotNumber} · {selectedSession.courseName} · Div {selectedSession.divisionName}
+              </p>
+            )}
+          </DialogHeader>
+
+          {attRecords.length === 0
+            ? <div className="flex justify-center py-10"><Spinner size={36} /></div>
+            : (
+              <>
+                <div className="flex gap-2 mb-3 flex-wrap items-center">
+                  <Input
+                    placeholder="Search by name or roll..."
+                    value={dialogFilterSearch}
+                    onChange={e => setDialogFilterSearch(e.target.value)}
+                    className="flex-1 min-w-[200px] bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                  />
+                  <Select value={dialogFilterStatus} onValueChange={setDialogFilterStatus}>
+                    <SelectTrigger className="w-[160px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All Statuses</SelectItem>
+                      <SelectItem value="P">Present (P)</SelectItem>
+                      <SelectItem value="P#">Present (P#)</SelectItem>
+                      <SelectItem value="LT">Late (LT)</SelectItem>
+                      <SelectItem value="AB">Absent (AB)</SelectItem>
+                      <SelectItem value="None">Not Marked</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {filteredAttRecords.length < attRecords.length && (
+                    <span className="text-xs text-[var(--color-text-muted)] self-center">{filteredAttRecords.length} of {attRecords.length} shown</span>
+                  )}
+                </div>
+                <div className="overflow-auto max-h-[60vh]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-[var(--color-border)]">
+                        <TableHead className="text-[var(--color-text-muted)]">Roll No.</TableHead>
+                        <TableHead className="text-[var(--color-text-muted)]">Student</TableHead>
+                        <TableHead className="text-[var(--color-text-muted)]">Swipe</TableHead>
+                        <TableHead className="text-[var(--color-text-muted)]">Status</TableHead>
+                        <TableHead className="text-[var(--color-text-muted)]">Remarks</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAttRecords.map(r => (
+                        <TableRow key={r.studentId} className="border-[var(--color-border)]">
+                          <TableCell className="text-[var(--color-text-primary)]">{r.rollNumber}</TableCell>
+                          <TableCell className="text-[var(--color-text-secondary)]">{r.studentName}</TableCell>
+                          <TableCell className="text-[var(--color-text-muted)]">{r.swipeTime || "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {(["P","P#","LT","AB"] as const).map(s => (
+                                <button key={s} onClick={() => updateAttendance(r.studentId, s)}
+                                  className={`px-2 py-0.5 rounded text-xs font-medium border cursor-pointer transition-colors ${
+                                    r.status === s ? statusColors[s] : "border-[var(--color-border)] text-[var(--color-text-muted)] bg-transparent hover:border-[var(--color-text-muted)]"
+                                  }`}>
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="text"
+                              className="w-[160px] h-7 text-xs bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                              placeholder="Add remark..."
+                              value={editingRemarks[r.studentId] || ""}
+                              onChange={e => setEditingRemarks(prev => ({ ...prev, [r.studentId]: e.target.value }))}
+                              onBlur={() => saveRemarks(r.studentId)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedSession(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
