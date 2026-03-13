@@ -5,11 +5,11 @@ import { cookies } from "next/headers";
 export const dynamic = "force-dynamic";
 
 /**
- * Calendar API — returns timetable + sessions for a week, for either a student or the office.
- * ?role=student — returns the logged-in student's timetable
- * ?role=office — returns all divisions' timetables
- * ?divisionId=N — filter to a specific division (office)
+ * Calendar API — returns timetable + sessions for a week.
+ * ?role=student — the logged-in student's timetable (core division + all groups)
+ * ?role=office  — all divisions and groups (or filtered by divisionId/groupId)
  * ?weekOf=YYYY-MM-DD — center the week on this date (defaults to today)
+ * ?divisionId=X / ?groupId=X — office filter
  */
 export async function GET(req: Request) {
   try {
@@ -19,16 +19,16 @@ export async function GET(req: Request) {
     const user = JSON.parse(session.value);
 
     const url = new URL(req.url);
-    const role = url.searchParams.get("role") || user.role;
+    const role           = url.searchParams.get("role") || user.role;
     const divisionIdParam = url.searchParams.get("divisionId");
-    const weekOfParam = url.searchParams.get("weekOf");
+    const groupIdParam    = url.searchParams.get("groupId");
+    const weekOfParam     = url.searchParams.get("weekOf");
 
-    // Determine the week
-    const refDate = weekOfParam ? new Date(weekOfParam) : new Date();
-    const dayOfWeek = refDate.getDay(); // 0=Sun
-    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const monday = new Date(refDate);
-    monday.setDate(refDate.getDate() + mondayOffset);
+    // Compute Mon–Sat week dates
+    const refDate    = weekOfParam ? new Date(weekOfParam) : new Date();
+    const dayOfWeek  = refDate.getDay();
+    const monday     = new Date(refDate);
+    monday.setDate(refDate.getDate() + (dayOfWeek === 0 ? -6 : 1 - dayOfWeek));
     const saturday = new Date(monday);
     saturday.setDate(monday.getDate() + 5);
 
@@ -37,80 +37,91 @@ export async function GET(req: Request) {
       weekDates.push(d.toISOString().split("T")[0]);
     }
 
-    let divisionIds: number[] = [];
-    let divisionNames: Record<number, string> = {};
+    // Visibility filter
+    const visibilityFilter =
+      role === "student" ? { visibility: { in: ["confirmed", "tentative"] } } : {};
+
+    type TimetableWhere = {
+      date: { in: string[] };
+      visibility?: { in: string[] };
+      OR?: Array<{ divisionId?: string; groupId?: { in: string[] } }>;
+      divisionId?: string;
+      groupId?: string;
+    };
+
+    let whereClause: TimetableWhere = { date: { in: weekDates }, ...visibilityFilter };
 
     if (role === "student") {
-      const student = await prisma.user.findUnique({
-        where: { id: user.userId },
-        include: { coreDivision: true, specDivision: true },
-      });
-      if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
-      if (student.coreDivisionId) { divisionIds.push(student.coreDivisionId); divisionNames[student.coreDivisionId] = student.coreDivision?.name || ""; }
-      if (student.specDivisionId) { divisionIds.push(student.specDivisionId); divisionNames[student.specDivisionId] = student.specDivision?.name || ""; }
+      const divisionId: string = user.divisionId;
+      const groupIds: string[] = user.groupIds ?? [];
+      whereClause = {
+        ...whereClause,
+        OR: [
+          { divisionId },
+          ...(groupIds.length > 0 ? [{ groupId: { in: groupIds } }] : []),
+        ],
+      };
     } else {
-      // Office — all or filtered
+      // Office — filter by divisionId or groupId if provided, else all
       if (divisionIdParam) {
-        const div = await prisma.division.findUnique({ where: { id: parseInt(divisionIdParam) } });
-        if (div) { divisionIds = [div.id]; divisionNames[div.id] = div.name; }
-      } else {
-        const allDivs = await prisma.division.findMany();
-        divisionIds = allDivs.map(d => d.id);
-        allDivs.forEach(d => { divisionNames[d.id] = d.name; });
+        whereClause = { ...whereClause, divisionId: divisionIdParam };
+      } else if (groupIdParam) {
+        whereClause = { ...whereClause, groupId: groupIdParam };
       }
     }
 
-    // Get timetable entries for these divisions within the week
-    const timetableEntries = await prisma.timetable.findMany({
-      where: { divisionId: { in: divisionIds }, date: { in: weekDates } },
-      include: { 
+    const entries = await prisma.timetable.findMany({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      where: whereClause as any,
+      include: {
         course: true,
         division: true,
+        group: true,
         faculty: true,
         room: true,
-        attendance: role === "student" ? { where: { studentId: user.userId } } : { select: { id: true, status: true } },
-        _count: { select: { attendance: true } }
+        slot: true,
+        attendance: role === "student"
+          ? { where: { studentId: user.studentId } }
+          : { select: { id: true, status: true } },
+        _count: { select: { attendance: true } },
       },
       orderBy: [{ date: "asc" }, { slotNumber: "asc" }],
     });
 
-    // Build calendar grid: day → slot → entry
     const calendar = weekDates.map((date, i) => {
-      const dayNum = (i + 1) % 7; // Mon=1, Tue=2, ..., Sat=6
-      const dayEntries = timetableEntries.filter(t => t.date === date);
-
+      const dayEntries = entries.filter((t) => t.date === date);
       return {
         date,
-        dayOfWeek: dayNum,
+        dayOfWeek: (i + 1) % 7,
         dayName: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i],
-        slots: dayEntries.map(entry => {
-          return {
-            slotNumber: entry.slotNumber,
-            startTime: entry.startTime,
-            endTime: entry.endTime,
-            courseCode: entry.course.code,
-            courseName: entry.course.name,
-            courseType: entry.course.type,
-            divisionName: entry.division.name,
-            divisionId: entry.divisionId,
-            facultyName: entry.faculty?.name || null,
-            hasSession: entry.isConducted,
-            sessionId: entry.id, // temp mapping until frontend is refactored
-            sessionNumber: entry.sessionNumber || null,
-            attendance: entry.attendance || [],
-            noSwipes: entry.isConducted ? entry._count.attendance === 0 : false,
-            roomName: entry.room?.name || null,
-          };
-        }),
+        slots: dayEntries.map((entry) => ({
+          slotNumber:  entry.slotNumber,
+          startTime:   entry.slot.startTime,
+          endTime:     entry.slot.endTime,
+          courseCode:  entry.course.code,
+          courseName:  entry.course.name,
+          courseType:  entry.course.type,
+          divisionName: entry.division?.name ?? entry.group?.name ?? "",
+          divisionId:  entry.divisionId,
+          groupId:     entry.groupId,
+          facultyName: entry.faculty?.name ?? null,
+          hasSession:  entry.isConducted,
+          sessionId:   entry.id,
+          sessionNumber: entry.sessionNumber ?? null,
+          attendance:  entry.attendance ?? [],
+          noSwipes:    entry.isConducted ? entry._count.attendance === 0 : false,
+          roomName:    entry.room?.name ?? null,
+          visibility:  entry.visibility,
+          activityType: entry.activityType,
+        })),
       };
     });
 
     return NextResponse.json({
-      weekOf: weekDates[0],
-      weekEnd: weekDates[weekDates.length - 1],
+      weekOf:    weekDates[0],
+      weekEnd:   weekDates[weekDates.length - 1],
       weekDates,
       calendar,
-      divisions: Object.entries(divisionNames).map(([id, name]) => ({ id: parseInt(id), name })),
     });
   } catch (error) {
     console.error("Calendar error:", error);

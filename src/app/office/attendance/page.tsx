@@ -32,14 +32,14 @@ const FIXED_SLOTS = [
 interface CalendarSlot {
   slotNumber: number; startTime: string; endTime: string;
   courseCode: string; courseName: string; courseType: string;
-  divisionName: string; divisionId: number; facultyName: string | null;
-  hasSession: boolean; sessionId: number | null; sessionNumber: number | null; noSwipes: boolean;
-  attendance: Array<{ id: number; status: string }>;
+  divisionName: string; divisionId: string | null; groupId: string | null; facultyName: string | null;
+  hasSession: boolean; sessionId: string | null; sessionNumber: number | null; noSwipes: boolean;
+  attendance: Array<{ id: string; status: string }>;
   roomName: string | null;
   date?: string;
 }
 interface CalendarDay  { date: string; dayOfWeek: number; dayName: string; slots: CalendarSlot[]; }
-interface CalendarData { weekOf: string; weekEnd: string; weekDates: string[]; calendar: CalendarDay[]; divisions: Array<{ id: number; name: string }>; }
+interface CalendarData { weekOf: string; weekEnd: string; weekDates: string[]; calendar: CalendarDay[]; }
 
 export default function OfficeAttendance() {
   const [loading, setLoading]         = useState(true);
@@ -53,9 +53,15 @@ export default function OfficeAttendance() {
   const [calData, setCalData]         = useState<CalendarData | null>(null);
   const [weekOffset, setWeekOffset]   = useState(0);
   const [filterDiv, setFilterDiv]     = useState("");
+  const [filterBatch, setFilterBatch] = useState("");
+  const [filterGroup, setFilterGroup] = useState("");
+  const [filterCalCourse, setFilterCalCourse] = useState("");
+  const [batches, setBatches]         = useState<Array<{ id: string; name: string; programme?: { name: string } }>>([]);
+  const [divisions, setDivisions]     = useState<Array<{ id: string; name: string; batchId?: string }>>([]);
+  const [groups, setGroups]           = useState<Array<{ id: string; name: string; batchId?: string }>>([]);
   const [selectedSession, setSelectedSession] = useState<CalendarSlot | null>(null);
   const [attRecords, setAttRecords]   = useState<any[]>([]);
-  const [editingRemarks, setEditingRemarks] = useState<Record<number, string>>({});
+  const [editingRemarks, setEditingRemarks] = useState<Record<string, string>>({});
   const [dialogFilterSearch, setDialogFilterSearch] = useState("");
   const [dialogFilterStatus, setDialogFilterStatus] = useState("__all__");
 
@@ -65,27 +71,46 @@ export default function OfficeAttendance() {
   const [reportEndDate, setReportEndDate]     = useState(new Date().toISOString().split("T")[0]);
   const [reportDivisionId, setReportDivisionId] = useState("");
   const [reportCourseId, setReportCourseId]   = useState("");
-  const [courses, setCourses]                 = useState<Array<{ id: number; code: string; name: string }>>([]);
+  const [courses, setCourses]                 = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [reportLoading, setReportLoading]     = useState(false);
 
-  const fetchCalendar = async (offset: number, divId?: string) => {
+  const fetchCalendar = async (offset: number) => {
     const ref = new Date();
     ref.setDate(ref.getDate() + offset * 7);
-    let url = `/api/calendar?role=office&weekOf=${ref.toISOString().split("T")[0]}`;
-    if (divId) url += `&divisionId=${divId}`;
+    const url = `/api/calendar?role=office&weekOf=${ref.toISOString().split("T")[0]}`;
     const res = await fetch(url);
     if (res.ok) setCalData(await res.json());
   };
 
   useEffect(() => {
     (async () => {
-      const [, cRes] = await Promise.all([fetchCalendar(0), fetch("/api/admin/courses")]);
+      const [, cRes, dRes, bRes, gRes] = await Promise.all([
+        fetchCalendar(0),
+        fetch("/api/admin/courses"),
+        fetch("/api/admin/divisions"),
+        fetch("/api/admin/batches"),
+        fetch("/api/admin/groups"),
+      ]);
       if (cRes.ok) {
         const data = await cRes.json();
         setCourses(data.map((c: any) => ({ id: c.id, code: c.code, name: c.name })));
       }
+      if (dRes.ok) {
+        const data = await dRes.json();
+        setDivisions(data.map((d: any) => ({ id: d.id, name: d.name, batchId: d.batchId })));
+      }
+      if (bRes.ok) {
+        const data = await bRes.json();
+        setBatches(Array.isArray(data) ? data.map((b: any) => ({ id: b.id, name: b.name, programme: b.programme })) : []);
+      }
+      if (gRes.ok) {
+        const data = await gRes.json();
+        const list = Array.isArray(data) ? data : [];
+        setGroups(list.map((g: any) => ({ id: g.id, name: g.name, batchId: g.batchId })));
+      }
       setLoading(false);
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const processFile = async (file: File) => {
@@ -104,14 +129,17 @@ export default function OfficeAttendance() {
       const fd = new FormData(); fd.append("file", selectedFile);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const d = await res.json();
-      if (res.ok) { setUploadResults(d.results); setSelectedFile(null); setPreviewData(null); await fetchCalendar(weekOffset, filterDiv); }
+      if (res.ok) { setUploadResults(d.results); setSelectedFile(null); setPreviewData(null); await fetchCalendar(weekOffset); }
       else alert(d.error || "Upload failed");
     } catch { alert("Upload failed"); }
     finally { setUploading(false); }
   };
 
-  const handleWeekChange = (dir: number) => { const n = weekOffset + dir; setWeekOffset(n); fetchCalendar(n, filterDiv); };
-  const handleDivChange  = (id: string)  => { setFilterDiv(id); fetchCalendar(weekOffset, id); };
+  const handleWeekChange = (dir: number) => { const n = weekOffset + dir; setWeekOffset(n); fetchCalendar(n); };
+
+  // Cascaded filter helpers
+  const visibleDivisions = filterBatch ? divisions.filter(d => d.batchId === filterBatch) : divisions;
+  const visibleGroups = filterBatch ? groups.filter(g => g.batchId === filterBatch) : groups;
 
   const openAttendance = async (slot: CalendarSlot) => {
     if (!slot.sessionId) return;
@@ -121,13 +149,13 @@ export default function OfficeAttendance() {
     if (res.ok) {
       const data = await res.json();
       setAttRecords(data.records);
-      const remarksInit: Record<number, string> = {};
+      const remarksInit: Record<string, string> = {};
       data.records.forEach((r: any) => { if (r.remarks) remarksInit[r.studentId] = r.remarks; });
       setEditingRemarks(remarksInit);
     }
   };
 
-  const updateAttendance = async (studentId: number, status: string) => {
+  const updateAttendance = async (studentId: string, status: string) => {
     if (!selectedSession?.sessionId) return;
     const remarks = editingRemarks[studentId] || null;
     setAttRecords(prev => prev.map(r => r.studentId === studentId ? { ...r, status, remarks } : r));
@@ -135,10 +163,10 @@ export default function OfficeAttendance() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: selectedSession.sessionId, studentId, status, remarks }),
     });
-    fetchCalendar(weekOffset, filterDiv);
+    fetchCalendar(weekOffset);
   };
 
-  const saveRemarks = async (studentId: number) => {
+  const saveRemarks = async (studentId: string) => {
     const record = attRecords.find(r => r.studentId === studentId);
     if (!record || !selectedSession?.sessionId || record.status === "None") return;
     const remarks = editingRemarks[studentId] || null;
@@ -313,7 +341,7 @@ export default function OfficeAttendance() {
               <SelectTrigger className="w-[180px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Divisions" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">All Divisions</SelectItem>
-                {calData?.divisions.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
+                {divisions.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -323,7 +351,7 @@ export default function OfficeAttendance() {
               <SelectTrigger className="w-[240px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Courses" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">All Courses</SelectItem>
-                {courses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.code} — {c.name}</SelectItem>)}
+                {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -337,27 +365,50 @@ export default function OfficeAttendance() {
       {/* ── Calendar Section ── */}
       {calData && (
         <>
-          <div className="flex justify-between items-start border-t border-[var(--color-border)] pt-6 mb-4 flex-wrap gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-[var(--color-text-primary)]">
-                <PencilIcon className="w-5 h-5 text-[#531f75]" /> Manual Update via Calendar
-              </h2>
-              <p className="text-sm mt-1 text-[var(--color-text-secondary)]">Click any session to mark or adjust attendance.</p>
-            </div>
-            <div className="flex gap-2 items-center flex-wrap">
-              <Select value={filterDiv || "__all__"} onValueChange={v => handleDivChange(v === "__all__" ? "" : v)}>
-                <SelectTrigger className="w-[180px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Divisions" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Divisions</SelectItem>
-                  {calData.divisions.map(d => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+          <div className="border-t border-[var(--color-border)] pt-6 mb-4">
+            <div className="flex justify-between items-start flex-wrap gap-3 mb-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-[var(--color-text-primary)]">
+                  <PencilIcon className="w-5 h-5 text-[#531f75]" /> Manual Update via Calendar
+                </h2>
+                <p className="text-sm mt-1 text-[var(--color-text-secondary)]">Click any session to mark or adjust attendance.</p>
+              </div>
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="sm" onClick={() => handleWeekChange(-1)}>← Prev</Button>
                 <span className="px-3 text-sm font-medium text-[var(--color-text-primary)] bg-[var(--color-bg-secondary)] rounded-[5px] h-7 flex items-center">{calData.weekDates[0]} – {calData.weekDates[calData.weekDates.length - 1]}</span>
                 <Button variant="outline" size="sm" onClick={() => handleWeekChange(1)}>Next →</Button>
+                <Button variant="outline" size="sm" onClick={() => { setWeekOffset(0); fetchCalendar(0); }}>Today</Button>
               </div>
-              <Button variant="outline" size="sm" onClick={() => { setWeekOffset(0); fetchCalendar(0, filterDiv); }}>Today</Button>
+            </div>
+            <div className="flex gap-2 items-center flex-wrap mb-3">
+              <Select value={filterBatch || "__all__"} onValueChange={v => { setFilterBatch(v === "__all__" ? "" : v); setFilterDiv(""); setFilterGroup(""); }}>
+                <SelectTrigger className="w-[180px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Batches" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Batches</SelectItem>
+                  {batches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterDiv || "__all__"} onValueChange={v => setFilterDiv(v === "__all__" ? "" : v)}>
+                <SelectTrigger className="w-[160px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Divisions" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Divisions</SelectItem>
+                  {visibleDivisions.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterGroup || "__all__"} onValueChange={v => setFilterGroup(v === "__all__" ? "" : v)}>
+                <SelectTrigger className="w-[160px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Groups" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Groups</SelectItem>
+                  {visibleGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterCalCourse || "__all__"} onValueChange={v => setFilterCalCourse(v === "__all__" ? "" : v)}>
+                <SelectTrigger className="w-[220px] bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]"><SelectValue placeholder="All Courses" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Courses</SelectItem>
+                  {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.code} - {c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -382,38 +433,55 @@ export default function OfficeAttendance() {
                   <div>{st.label}</div>
                 </div>
                 {calData.calendar.map(day => {
-                  const slot = day.slots.find(s => s.slotNumber === st.slot);
-                  if (!slot || (filterDiv && slot.divisionId !== parseInt(filterDiv))) {
+                  const slotsForTime = day.slots.filter(s => s.slotNumber === st.slot);
+                  // Apply client-side filters
+                  const filtered = slotsForTime.filter(s => {
+                    if (filterDiv && s.divisionId !== filterDiv && !s.groupId) return false;
+                    if (filterGroup && s.groupId !== filterGroup && !s.divisionId) return false;
+                    if (filterCalCourse) {
+                      // Match by course code since we have code not ID in slot
+                      const matchCourse = courses.find(c => c.id === filterCalCourse);
+                      if (matchCourse && s.courseCode !== matchCourse.code) return false;
+                    }
+                    return true;
+                  });
+                  if (filtered.length === 0) {
                     return <div key={`${day.date}-${st.slot}`} className="p-1.5 border-t border-[var(--color-border)]" />;
                   }
-                  const p  = slot.attendance.filter(a => a.status === "P"  || a.status === "P#").length;
-                  const ab = slot.attendance.filter(a => a.status === "AB").length;
-                  const lt = slot.attendance.filter(a => a.status === "LT").length;
-                  const clickable = !!slot.sessionId;
-                  const hasAttendance = slot.attendance.length > 0;
                   return (
-                    <div key={`${day.date}-${st.slot}`}
-                      onClick={() => { if (clickable) openAttendance({ ...slot, date: day.date }); }}
-                      className="rounded bg-[var(--color-bg-secondary)] mt-0.5"
-                      style={{ padding: 6,
-                        borderTop: "1px solid var(--color-border)",
-                        borderLeft: `3px solid var(${slot.courseType === "core" ? "--color-accent" : "--color-warning"})`,
-                        cursor: clickable ? "pointer" : "default" }}>
-                      <div className="font-bold text-[var(--color-text-primary)]">{slot.courseCode}</div>
-                      <div className="truncate mt-0.5 text-[var(--color-text-muted)]" style={{ fontSize: 10 }}>{slot.courseName}</div>
-                      <div className="mt-0.5 text-[#8b5cf6]" style={{ fontSize: 10 }}>
-                        Div {slot.divisionName}{slot.facultyName && ` • ${slot.facultyName.split(" ")[1]}`}
-                        {slot.roomName && ` • ${slot.roomName}`}
+                    <div key={`${day.date}-${st.slot}`} className="border-t border-[var(--color-border)] p-0.5">
+                      <div className="flex flex-col gap-0.5">
+                        {filtered.map((slot, idx) => {
+                          const p  = slot.attendance.filter(a => a.status === "P"  || a.status === "P#").length;
+                          const ab = slot.attendance.filter(a => a.status === "AB").length;
+                          const lt = slot.attendance.filter(a => a.status === "LT").length;
+                          const clickable = !!slot.sessionId;
+                          const hasAttendance = slot.attendance.length > 0;
+                          return (
+                            <div key={`${slot.sessionId || idx}`}
+                              onClick={() => { if (clickable) openAttendance({ ...slot, date: day.date }); }}
+                              className="rounded bg-[var(--color-bg-secondary)]"
+                              style={{ padding: 5,
+                                borderLeft: `3px solid var(${slot.courseType === "core" ? "--color-accent" : "--color-warning"})`,
+                                cursor: clickable ? "pointer" : "default" }}>
+                              <div className="font-bold text-[var(--color-text-primary)]">{slot.courseCode}</div>
+                              <div className="mt-0.5 text-[#8b5cf6]" style={{ fontSize: 10 }}>
+                                {slot.divisionName}{slot.facultyName && ` · ${slot.facultyName.split(" ")[1] || slot.facultyName}`}
+                                {slot.roomName && ` · ${slot.roomName}`}
+                              </div>
+                              {hasAttendance ? (
+                                <div className="flex gap-1.5 mt-1 font-medium" style={{ fontSize: 10 }}>
+                                  <span className="text-green-500">{p}P</span>
+                                  {ab > 0 && <span className="text-red-500">{ab}AB</span>}
+                                  {lt > 0 && <span className="text-yellow-500">{lt}LT</span>}
+                                </div>
+                              ) : (
+                                <div className="mt-0.5 font-semibold text-[#8b5cf6]" style={{ fontSize: 9 }}>Click to mark</div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                      {hasAttendance ? (
-                        <div className="flex gap-1.5 mt-2 font-medium" style={{ fontSize: 11 }}>
-                          <span className="text-green-500">{p} P</span>
-                          {ab > 0 && <span className="text-red-500">{ab} AB</span>}
-                          {lt > 0 && <span className="text-yellow-500">{lt} LT</span>}
-                        </div>
-                      ) : (
-                        <div className="mt-1 font-semibold text-[#8b5cf6]" style={{ fontSize: 10 }}>Click to mark</div>
-                      )}
                     </div>
                   );
                 })}

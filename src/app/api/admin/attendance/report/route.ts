@@ -5,10 +5,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const startDate = searchParams.get("startDate");
-  const endDate = searchParams.get("endDate");
+  const startDate  = searchParams.get("startDate");
+  const endDate    = searchParams.get("endDate");
   const divisionId = searchParams.get("divisionId");
-  const courseId = searchParams.get("courseId");
+  const courseId   = searchParams.get("courseId");
 
   if (!startDate || !endDate) {
     return NextResponse.json(
@@ -17,19 +17,21 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const timetables = await (prisma.timetable.findMany as any)({
+  const timetables = await prisma.timetable.findMany({
     where: {
       date: { gte: startDate, lte: endDate },
       isConducted: true,
-      ...(divisionId ? { divisionId: parseInt(divisionId) } : {}),
-      ...(courseId ? { courseId: parseInt(courseId) } : {}),
+      ...(divisionId ? { divisionId } : {}),
+      ...(courseId   ? { courseId   } : {}),
     },
     include: {
-      course: true,
+      course:   true,
       division: true,
-      faculty: true,
+      group:    true,
+      faculty:  true,
+      slot:     true,
       attendance: {
-        include: { student: true },
+        include: { student: { include: { user: true } } },
         orderBy: { student: { rollNumber: "asc" } },
       },
     },
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest) {
     "End Time",
     "Course Code",
     "Course Name",
-    "Division",
+    "Division/Group",
     "Faculty",
     "Roll Number",
     "Student Name",
@@ -63,19 +65,20 @@ export async function GET(req: NextRequest) {
   const rows: string[] = [header];
 
   for (const tt of timetables) {
+    const divOrGroup = tt.division?.name ?? tt.group?.name ?? "";
     for (const att of tt.attendance) {
       rows.push(
         [
           tt.date,
           tt.slotNumber,
-          escCSV(tt.startTime),
-          escCSV(tt.endTime),
+          escCSV(tt.slot.startTime),
+          escCSV(tt.slot.endTime),
           escCSV(tt.course.code),
           escCSV(tt.course.name),
-          escCSV(tt.division.name),
+          escCSV(divOrGroup),
           escCSV(tt.faculty?.name ?? ""),
           escCSV(att.student.rollNumber),
-          escCSV(att.student.name),
+          escCSV(att.student.user.name),
           att.status,
           escCSV(att.swipeTime),
           escCSV(att.remarks),

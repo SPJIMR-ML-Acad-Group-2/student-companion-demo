@@ -14,7 +14,7 @@ const NAV = [
   { href: "/student/calendar", Icon: CalendarDaysIcon,  label: "Calendar"   },
 ];
 
-export default function StudentSidebar({ userName }: { userName: string }) {
+export default function StudentSidebar({ userName, open, onClose }: { userName: string; open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const router   = useRouter();
 
@@ -24,10 +24,13 @@ export default function StudentSidebar({ userName }: { userName: string }) {
   };
 
   return (
-    <aside
-      className="fixed top-0 left-0 bottom-0 z-10 flex flex-col bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] px-4 py-6"
-      style={{ width: "260px" }}
-    >
+    <>
+      {open && (
+        <div className="fixed inset-0 z-20 bg-black/40 md:hidden" onClick={onClose} />
+      )}
+      <aside
+        className={`fixed top-0 left-0 bottom-0 z-30 flex flex-col bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] px-4 py-6 w-[260px] transition-transform duration-200 md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+      >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-2 mb-8">
         <div
@@ -95,5 +98,6 @@ export default function StudentSidebar({ userName }: { userName: string }) {
         </button>
       </div>
     </aside>
+    </>
   );
 }

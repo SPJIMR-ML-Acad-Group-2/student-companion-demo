@@ -28,7 +28,7 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   try {
-    await prisma.room.delete({ where: { id: parseInt(id) } });
+    await prisma.room.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
