@@ -3,6 +3,7 @@ import "./globals.css";
 import { Nunito_Sans, Lora } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 
 const nunitoSans = Nunito_Sans({
   subsets: ["latin"],
@@ -40,7 +41,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          {children}
+          <Toaster />
+        </TooltipProvider>
       </body>
     </html>
   );

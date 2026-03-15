@@ -56,6 +56,7 @@ interface Group {
     room?: Room;
   }[];
   allowedBatchIds?: string[];
+  allowedBatches?: { id: string; name: string }[];
   batch?: { id: string; name: string; programme?: { name: string } } | null;
   specialisation?: { name: string; code: string } | null;
 }
@@ -93,11 +94,14 @@ interface Term {
   name: string;
   number: number;
   batchId: string;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 interface DraftEntry {
   id: string;
   divisionId: string | null;
   groupId: string | null;
+  termId?: string | null;
   courseId: string;
   facultyId: string | null;
   roomId: string | null;
@@ -108,6 +112,24 @@ interface DraftEntry {
   division?: Division | null;
   group?: (Group & { batch?: { id: string; name: string } | null }) | null;
   course: Course;
+  faculty?: Faculty | null;
+  room?: Room | null;
+}
+
+interface LiveEntry {
+  id: string;
+  divisionId: string | null;
+  groupId: string | null;
+  termId?: string | null;
+  courseId: string;
+  facultyId: string | null;
+  roomId: string | null;
+  date: string;
+  slotNumber: number;
+  activityType: string;
+  division?: Division | null;
+  group?: Group | null;
+  course?: Course | null;
   faculty?: Faculty | null;
   room?: Room | null;
 }
@@ -123,7 +145,7 @@ const FIXED_SLOTS = [
   { slot: 8, label: "7:00–8:10" },
 ];
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // ─── ToggleChip Component ─────────────────────────────────────────────────────
 
@@ -165,7 +187,7 @@ function getWeekDates(ref: Date): string[] {
   const offset = day === 0 ? -6 : 1 - day;
   const mon = new Date(ref);
   mon.setDate(ref.getDate() + offset);
-  return Array.from({ length: 6 }, (_, i) => {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(mon);
     d.setDate(mon.getDate() + i);
     return localDate(d);
@@ -176,7 +198,7 @@ function fmtWeekRange(dates: string[]) {
   if (!dates.length) return "";
   const parse = (s: string) => new Date(s + "T00:00:00");
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-  return `${parse(dates[0]).toLocaleDateString("en-IN", opts)} – ${parse(dates[5]).toLocaleDateString("en-IN", opts)}`;
+  return `${parse(dates[0]).toLocaleDateString("en-IN", opts)} – ${parse(dates[dates.length - 1]).toLocaleDateString("en-IN", opts)}`;
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -186,6 +208,7 @@ export default function TimetableDraftPage() {
     getWeekDates(new Date()),
   );
   const [allDrafts, setAllDrafts] = useState<DraftEntry[]>([]);
+  const [allLiveEntries, setAllLiveEntries] = useState<LiveEntry[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -205,7 +228,7 @@ export default function TimetableDraftPage() {
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [mobileDay, setMobileDay] = useState(() => {
     const d = new Date().getDay();
-    return d === 0 ? 5 : d - 1; // Sun→Sat(5), Mon→0, ..., Sat→5
+    return d === 0 ? 6 : d - 1; // Sun→6, Mon→0, ..., Sat→5
   });
   const [modal, setModal] = useState<{
     open: boolean;
@@ -260,41 +283,169 @@ export default function TimetableDraftPage() {
   useEffect(() => {
     Promise.all([
       fetch("/api/admin/divisions").then((r) => r.json()),
-      fetch("/api/admin/courses").then((r) => r.json()),
       fetch("/api/admin/faculty").then((r) => r.json()),
       fetch("/api/admin/rooms").then((r) => r.json()),
       fetch("/api/admin/groups").then((r) => r.json()),
-      fetch("/api/admin/batches").then((r) => r.json()),
+      fetch("/api/admin/batches?activeOnly=true").then((r) => r.json()),
       fetch("/api/admin/terms").then((r) => r.json()),
-    ]).then(([divs, crs, fac, rms, grps, btchs, trms]) => {
+    ]).then(([divs, fac, rms, grps, btchs, trms]) => {
+      const parsedBatches = Array.isArray(btchs)
+        ? btchs
+        : (btchs.batches ?? []);
+      const parsedTerms = Array.isArray(trms) ? trms : (trms.terms ?? []);
+
       setDivisions(Array.isArray(divs) ? divs : (divs.divisions ?? []));
-      setCourses(Array.isArray(crs) ? crs : (crs.courses ?? []));
       setFaculty(Array.isArray(fac) ? fac : (fac.faculty ?? []));
       setRooms(Array.isArray(rms) ? rms : (rms.rooms ?? []));
       setGroups(Array.isArray(grps) ? grps : (grps.groups ?? []));
-      setBatches(Array.isArray(btchs) ? btchs : (btchs.batches ?? []));
-      setTerms(Array.isArray(trms) ? trms : (trms.terms ?? []));
+      setBatches(parsedBatches);
+      setTerms(parsedTerms);
+
+      const defaultBatch =
+        parsedBatches.find((batch: Batch) => !!batch.activeTermId) ??
+        parsedBatches[0] ??
+        null;
+      if (defaultBatch) {
+        setSelectedBatchId(defaultBatch.id);
+        const defaultTermId =
+          defaultBatch.activeTermId ??
+          parsedTerms.find((term: Term) => term.batchId === defaultBatch.id)
+            ?.id ??
+          "__all__";
+        setSelectedTermId(defaultTermId);
+      }
     });
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedTermId !== "__all__") {
+      params.set("termId", selectedTermId);
+    } else if (selectedBatchId !== "__all__") {
+      params.set("batchId", selectedBatchId);
+    }
+    const query = params.toString();
+
+    fetch(`/api/admin/courses${query ? `?${query}` : ""}`)
+      .then((r) => r.json())
+      .then((crs) => {
+        setCourses(Array.isArray(crs) ? crs : (crs.courses ?? []));
+      });
+  }, [selectedTermId, selectedBatchId]);
 
   // ─── Fetch ALL drafts for current week (no server-side filtering) ──────
 
   const fetchDrafts = useCallback(async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams({ weekOf: weekDates[0] });
+      if (selectedTermId !== "__all__") params.set("termId", selectedTermId);
       const res = await fetch(
-        `/api/admin/timetable/draft?weekOf=${weekDates[0]}`,
+        `/api/admin/timetable/draft?${params.toString()}`,
       );
       const data = await res.json();
       setAllDrafts(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
     }
-  }, [weekDates]);
+  }, [weekDates, selectedTermId]);
+
+  const fetchLiveTimetable = useCallback(async () => {
+    const params = new URLSearchParams({ weekOf: weekDates[0] });
+    if (selectedTermId !== "__all__") params.set("termId", selectedTermId);
+    const res = await fetch(`/api/admin/timetable?${params.toString()}`);
+    const data = await res.json();
+    setAllLiveEntries(Array.isArray(data) ? data : []);
+  }, [weekDates, selectedTermId]);
 
   useEffect(() => {
     fetchDrafts();
-  }, [fetchDrafts]);
+    fetchLiveTimetable();
+  }, [fetchDrafts, fetchLiveTimetable]);
+
+  const getEntryKey = useCallback(
+    (entry: {
+      divisionId: string | null;
+      groupId: string | null;
+      date: string;
+      slotNumber: number;
+    }) => {
+      if (entry.divisionId) {
+        return `division:${entry.divisionId}:${entry.date}:${entry.slotNumber}`;
+      }
+      return `group:${entry.groupId}:${entry.date}:${entry.slotNumber}`;
+    },
+    [],
+  );
+
+  const syncPreview = useMemo(() => {
+    const liveByKey = new Map<string, LiveEntry>();
+    allLiveEntries.forEach((entry) => liveByKey.set(getEntryKey(entry), entry));
+
+    const draftByKey = new Map<string, DraftEntry>();
+    allDrafts.forEach((entry) => draftByKey.set(getEntryKey(entry), entry));
+
+    const toAdd: DraftEntry[] = [];
+    const toUpdate: Array<{ draft: DraftEntry; live: LiveEntry }> = [];
+    const toRemove: LiveEntry[] = [];
+
+    for (const draft of allDrafts) {
+      const key = getEntryKey(draft);
+      const live = liveByKey.get(key);
+      if (!live) {
+        toAdd.push(draft);
+        continue;
+      }
+      const changed =
+        live.termId !== (draft.termId ?? null) ||
+        live.courseId !== draft.courseId ||
+        live.facultyId !== draft.facultyId ||
+        live.roomId !== draft.roomId ||
+        live.activityType !== draft.activityType;
+      if (changed) {
+        toUpdate.push({ draft, live });
+      }
+    }
+
+    for (const live of allLiveEntries) {
+      const key = getEntryKey(live);
+      if (!draftByKey.has(key)) {
+        toRemove.push(live);
+      }
+    }
+
+    return {
+      toAdd,
+      toUpdate,
+      toRemove,
+      totals: {
+        add: toAdd.length,
+        update: toUpdate.length,
+        remove: toRemove.length,
+      },
+    };
+  }, [allDrafts, allLiveEntries, getEntryKey]);
+
+  const describeEntry = useCallback(
+    (entry: {
+      date: string;
+      slotNumber: number;
+      courseId: string;
+      divisionId: string | null;
+      groupId: string | null;
+      course?: Course | null;
+      division?: Division | null;
+      group?: Group | null;
+    }) => {
+      const target = entry.division?.name ?? entry.group?.name ?? "Cohort";
+      const courseCode =
+        entry.course?.code ??
+        courses.find((course) => course.id === entry.courseId)?.code ??
+        "Course";
+      return `${entry.date} S${entry.slotNumber} - ${target} - ${courseCode}`;
+    },
+    [courses],
+  );
 
   // ─── Cascading derived filters ────────────────────────────────────────────
 
@@ -322,23 +473,39 @@ export default function TimetableDraftPage() {
   );
 
   // Groups filtered by selected batches
-  const visibleGroups = useMemo(
-    () =>
-      selectedBatchId === "__all__"
-        ? groups
-        : groups.filter((g) =>
-            (g.allowedBatchIds ?? (g.batchId ? [g.batchId] : [])).some(
-              (batchId) => batchId === selectedBatchId,
-            ),
-          ),
-    [groups, selectedBatchId],
-  );
+  const visibleGroups = useMemo(() => {
+    const selectedTerm =
+      selectedTermId !== "__all__"
+        ? terms.find((term) => term.id === selectedTermId)
+        : null;
+    const contextBatchId =
+      selectedBatchId !== "__all__"
+        ? selectedBatchId
+        : (selectedTerm?.batchId ?? null);
+
+    if (!contextBatchId) return groups;
+    return groups.filter((g) =>
+      (g.allowedBatchIds ?? (g.batchId ? [g.batchId] : [])).some(
+        (batchId) => batchId === contextBatchId,
+      ),
+    );
+  }, [groups, selectedBatchId, selectedTermId, terms]);
 
   const termById = useMemo(() => {
     const map = new Map<string, Term>();
     terms.forEach((term) => map.set(term.id, term));
     return map;
   }, [terms]);
+
+  const getGroupDisplayLabel = useCallback((group: Group) => {
+    const allowedBatchNames =
+      group.allowedBatches?.map((batch) => batch.name) ??
+      (group.batch?.name ? [group.batch.name] : []);
+    const batchesSuffix = allowedBatchNames.length
+      ? ` • ${allowedBatchNames.join(" + ")}`
+      : "";
+    return `${group.name}${batchesSuffix}`;
+  }, []);
 
   const getPreferredTermIdForBatch = useCallback(
     (batchId?: string | null) => {
@@ -581,6 +748,11 @@ export default function TimetableDraftPage() {
   // ─── Cell click handlers ──────────────────────────────────────────────────
 
   const openAdd = (date: string, slotNumber: number) => {
+    if (selectedTermId === "__all__") {
+      alert("Select a term before adding draft slots.");
+      return;
+    }
+
     const isGroupFiltered = filterGroupId !== "__all__";
     setForm({
       targetType: isGroupFiltered ? "group" : "division",
@@ -621,6 +793,25 @@ export default function TimetableDraftPage() {
   // ─── Save draft ───────────────────────────────────────────────────────────
 
   const saveDraft = async () => {
+    if (selectedTermId === "__all__") {
+      setFormError("Select a term before saving draft slots.");
+      return;
+    }
+
+    const selectedTerm = terms.find((term) => term.id === selectedTermId);
+    if (selectedTerm?.startDate && modal.date < selectedTerm.startDate) {
+      setFormError(
+        `Date is before ${selectedTerm.name} start date (${selectedTerm.startDate}).`,
+      );
+      return;
+    }
+    if (selectedTerm?.endDate && modal.date > selectedTerm.endDate) {
+      setFormError(
+        `Date is after ${selectedTerm.name} end date (${selectedTerm.endDate}).`,
+      );
+      return;
+    }
+
     const hasDivisions =
       form.targetType === "division" && form.divisionIds.length > 0;
     const hasGroup = form.targetType === "group" && form.groupId;
@@ -688,6 +879,7 @@ export default function TimetableDraftPage() {
             body: JSON.stringify({
               divisionId: divId,
               groupId: null,
+              termId: selectedTermId,
               courseId: form.courseId,
               facultyId: form.facultyId || null,
               roomId: form.roomId || null,
@@ -711,6 +903,7 @@ export default function TimetableDraftPage() {
           body: JSON.stringify({
             divisionId: null,
             groupId: form.groupId,
+            termId: selectedTermId,
             courseId: form.courseId,
             facultyId: form.facultyId || null,
             roomId: form.roomId || null,
@@ -758,14 +951,16 @@ export default function TimetableDraftPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           weekOf: weekDates[0],
+          termId: selectedTermId !== "__all__" ? selectedTermId : undefined,
         }),
       });
       const data = await res.json();
       alert(
-        `Published ${data.published} entries${data.skipped ? ` (${data.skipped} skipped)` : ""}.`,
+        `Synced week: ${data.published} published${data.skipped ? `, ${data.skipped} skipped` : ""}${data.removed ? `, ${data.removed} removed` : ""}.`,
       );
       setShowPublishDialog(false);
       fetchDrafts();
+      fetchLiveTimetable();
     } finally {
       setPublishing(false);
     }
@@ -891,10 +1086,10 @@ export default function TimetableDraftPage() {
           </div>
           <Button
             onClick={() => setShowPublishDialog(true)}
-            disabled={pendingCount === 0}
+            disabled={publishing}
             className="bg-[#531f75] hover:bg-[#531f75]/90 text-white h-8"
           >
-            Publish ({pendingCount})
+            Publish Sync ({pendingCount})
           </Button>
         </div>
       </div>
@@ -934,7 +1129,19 @@ export default function TimetableDraftPage() {
               value={selectedBatchId}
               onValueChange={(value) => {
                 setSelectedBatchId(value);
-                setSelectedTermId("__all__");
+                if (value === "__all__") {
+                  setSelectedTermId("__all__");
+                  return;
+                }
+
+                const selectedBatch = batches.find(
+                  (batch) => batch.id === value,
+                );
+                const nextTermId =
+                  selectedBatch?.activeTermId ??
+                  terms.find((term) => term.batchId === value)?.id ??
+                  "__all__";
+                setSelectedTermId(nextTermId);
               }}
             >
               <SelectTrigger className="h-9 text-sm">
@@ -1016,7 +1223,7 @@ export default function TimetableDraftPage() {
                 <SelectItem value="__all__">All Groups</SelectItem>
                 {visibleGroups.map((g) => (
                   <SelectItem key={g.id} value={String(g.id)}>
-                    {g.name}
+                    {getGroupDisplayLabel(g)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1465,7 +1672,7 @@ export default function TimetableDraftPage() {
                   <SelectContent>
                     {visibleGroups.map((g) => (
                       <SelectItem key={g.id} value={String(g.id)}>
-                        {g.name}{" "}
+                        {getGroupDisplayLabel(g)}{" "}
                         {g.specialisation
                           ? `(${g.specialisation.code})`
                           : `(${g.type})`}
@@ -1690,15 +1897,47 @@ export default function TimetableDraftPage() {
 
       {/* Publish dialog */}
       <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Publish Week</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            This will publish <strong>{pendingCount}</strong> draft slot
-            {pendingCount !== 1 ? "s" : ""} for{" "}
-            <strong>{fmtWeekRange(weekDates)}</strong> to the live timetable.
+          <p className="text-sm text-[var(--color-text-secondary)] mb-3">
+            This sync will publish updates for{" "}
+            <strong>{fmtWeekRange(weekDates)}</strong>. It will also remove live
+            slots that no longer exist in drafts for this scope. Pending draft
+            edits: <strong>{pendingCount}</strong>.
           </p>
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-3 space-y-2">
+            <div className="text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
+              Change Summary
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
+                Add: {syncPreview.totals.add}
+              </Badge>
+              <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/30">
+                Update: {syncPreview.totals.update}
+              </Badge>
+              <Badge className="bg-rose-500/10 text-rose-700 border-rose-500/30">
+                Remove: {syncPreview.totals.remove}
+              </Badge>
+            </div>
+            <div className="space-y-1 text-xs text-[var(--color-text-secondary)]">
+              {syncPreview.toAdd.slice(0, 3).map((entry) => (
+                <div key={`add-${entry.id}`}>+ {describeEntry(entry)}</div>
+              ))}
+              {syncPreview.toUpdate.slice(0, 3).map(({ draft }) => (
+                <div key={`update-${draft.id}`}>~ {describeEntry(draft)}</div>
+              ))}
+              {syncPreview.toRemove.slice(0, 3).map((entry) => (
+                <div key={`remove-${entry.id}`}>- {describeEntry(entry)}</div>
+              ))}
+              {syncPreview.totals.add +
+                syncPreview.totals.update +
+                syncPreview.totals.remove ===
+                0 && <div>No net changes detected for this scope.</div>}
+            </div>
+          </div>
           <DialogFooter className="gap-2">
             <Button
               variant="outline"

@@ -42,9 +42,13 @@ model Term {
   batchId  String // linked to batch (not programme)
   number   Int // 1, 2, 3...
   name     String // "Term 1", "Term 3"
+  startDate String? // YYYY-MM-DD
+  endDate   String? // YYYY-MM-DD
   batch    Batch        @relation("BatchTerms", fields: [batchId], references: [id])
   activeFor Batch[]     @relation("ActiveTerm")
   courses  CourseTerm[]
+  timetable Timetable[]
+  draftTimetable DraftTimetable[]
   divisionRoomAssignments DivisionTermRoom[]
   groupRoomAssignments    GroupTermRoom[]
 
@@ -252,6 +256,7 @@ model Timetable {
   id            String       @id @default(uuid())
   divisionId    String? // null for group-based classes
   groupId       String? // null for core division classes
+  termId        String?
   courseId      String
   facultyId     String?
   roomId        String?
@@ -263,6 +268,7 @@ model Timetable {
   activityType  String       @default("session") // "session" | "evaluation"
   division      Division?    @relation(fields: [divisionId], references: [id])
   group         Group?       @relation(fields: [groupId], references: [id])
+  term          Term?        @relation(fields: [termId], references: [id])
   course        Course       @relation(fields: [courseId], references: [id])
   faculty       Faculty?     @relation(fields: [facultyId], references: [id])
   room          Room?        @relation(fields: [roomId], references: [id])
@@ -293,6 +299,7 @@ model DraftTimetable {
   id           String    @id @default(uuid())
   divisionId   String? // null for group-based drafts
   groupId      String? // null for core division drafts
+  termId       String?
   courseId     String
   facultyId    String?
   roomId       String?
@@ -303,6 +310,7 @@ model DraftTimetable {
   createdAt    DateTime  @default(now())
   division     Division? @relation(fields: [divisionId], references: [id])
   group        Group?    @relation(fields: [groupId], references: [id])
+  term         Term?     @relation(fields: [termId], references: [id])
   course       Course    @relation(fields: [courseId], references: [id])
   faculty      Faculty?  @relation(fields: [facultyId], references: [id])
   room         Room?     @relation(fields: [roomId], references: [id])

@@ -86,8 +86,19 @@ async function getCoreDivisionIdsForTerms(termIds: string[]) {
   return divisions.map((division) => division.id);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const termId = req.nextUrl.searchParams.get("termId");
+  const batchId = req.nextUrl.searchParams.get("batchId");
+
+  const where: any = {};
+  if (termId) {
+    where.courseTerms = { some: { termId } };
+  } else if (batchId) {
+    where.courseTerms = { some: { term: { batchId } } };
+  }
+
   const courses = await prisma.course.findMany({
+    where,
     include: {
       courseTerms: {
         include: {

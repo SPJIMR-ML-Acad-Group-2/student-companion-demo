@@ -41,6 +41,7 @@ import {
   Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
 import type { ColumnDef } from "@tanstack/react-table";
+import { toast } from "sonner";
 
 interface Programme {
   id: string;
@@ -79,6 +80,8 @@ interface Term {
   number: number;
   name: string;
   isActive: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
   batch?: Batch;
 }
 interface TermRoomAssignment {
@@ -627,7 +630,25 @@ function ProgrammesTab() {
     startYear: "",
     endYear: "",
   });
-  const [termForm, setTermForm] = useState({ batchId: "", number: "" });
+  const [termForm, setTermForm] = useState({
+    batchId: "",
+    number: "",
+    startDate: "",
+    endDate: "",
+  });
+  const [editingProgrammeId, setEditingProgrammeId] = useState<string | null>(
+    null,
+  );
+  const [editProgrammeForm, setEditProgrammeForm] = useState({
+    code: "",
+    name: "",
+    fullName: "",
+  });
+  const [termDrafts, setTermDrafts] = useState<
+    Record<string, { startDate: string; endDate: string }>
+  >({});
+  const [error, setError] = useState("");
+
   const fetch_ = useCallback(async () => {
     setProgrammes(await (await fetch("/api/admin/programmes")).json());
   }, []);
@@ -635,18 +656,131 @@ function ProgrammesTab() {
     fetch_();
   }, [fetch_]);
 
+  const beginProgrammeEdit = (programme: Programme) => {
+    setEditingProgrammeId(programme.id);
+    setEditProgrammeForm({
+      code: programme.code,
+      name: programme.name,
+      fullName: programme.fullName,
+    });
+  };
+
+  const saveProgramme = async () => {
+    if (!editingProgrammeId) return;
+    setError("");
+    const res = await fetch("/api/admin/programmes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editingProgrammeId, ...editProgrammeForm }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update programme");
+      return;
+    }
+    setEditingProgrammeId(null);
+    fetch_();
+  };
+
+  const toggleBatchStatus = async (batch: BatchFull) => {
+    setError("");
+    const res = await fetch("/api/admin/batches", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: batch.id, isActive: !batch.isActive }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update batch status");
+      return;
+    }
+    fetch_();
+  };
+
+  const getTermDraft = (term: Term) =>
+    termDrafts[term.id] ?? {
+      startDate: term.startDate ?? "",
+      endDate: term.endDate ?? "",
+    };
+
+  const setTermDraftField = (
+    term: Term,
+    field: "startDate" | "endDate",
+    value: string,
+  ) => {
+    setTermDrafts((prev) => ({
+      ...prev,
+      [term.id]: {
+        ...getTermDraft(term),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveTermDates = async (term: Term) => {
+    const draft = getTermDraft(term);
+    setError("");
+    const res = await fetch("/api/admin/terms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: term.id,
+        startDate: draft.startDate || null,
+        endDate: draft.endDate || null,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update term dates");
+      toast.error(data.error ?? `Could not save dates for ${term.name}`);
+      return;
+    }
+    toast.success(`Saved dates for ${term.name}`);
+    fetch_();
+  };
+
+  const setActiveTerm = async (term: Term, isActive: boolean) => {
+    setError("");
+    const res = await fetch("/api/admin/terms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: term.id, isActive }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update active term");
+      toast.error(
+        data.error ?? `Could not ${isActive ? "set" : "clear"} active term`,
+      );
+      return;
+    }
+    toast.success(
+      isActive
+        ? `${term.name} is now the active term`
+        : `Active term cleared for this batch`,
+    );
+    fetch_();
+  };
+
   const addProg = async () => {
-    await fetch("/api/admin/programmes", {
+    setError("");
+    const res = await fetch("/api/admin/programmes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not create programme");
+      return;
+    }
     setForm({ code: "", name: "", fullName: "" });
     setShowForm(false);
     fetch_();
   };
   const addBatch = async () => {
-    await fetch("/api/admin/batches", {
+    setError("");
+    const res = await fetch("/api/admin/batches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -655,19 +789,32 @@ function ProgrammesTab() {
         endYear: parseInt(batchForm.endYear),
       }),
     });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not create batch");
+      return;
+    }
     setBatchForm({ programmeId: "", name: "", startYear: "", endYear: "" });
     fetch_();
   };
   const addTerm = async () => {
-    await fetch("/api/admin/terms", {
+    setError("");
+    const res = await fetch("/api/admin/terms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         batchId: termForm.batchId,
         number: parseInt(termForm.number),
+        startDate: termForm.startDate || null,
+        endDate: termForm.endDate || null,
       }),
     });
-    setTermForm({ batchId: "", number: "" });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not create term");
+      return;
+    }
+    setTermForm({ batchId: "", number: "", startDate: "", endDate: "" });
     fetch_();
   };
 
@@ -685,6 +832,7 @@ function ProgrammesTab() {
           <PlusIcon className="w-4 h-4" /> Add Programme
         </Button>
       </div>
+      <Err msg={error} />
       {showForm && (
         <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
           <CardContent className="p-4">
@@ -732,13 +880,74 @@ function ProgrammesTab() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="text-lg font-semibold text-[var(--color-text-primary)]">
-                  {p.name}{" "}
-                  <span className="text-sm text-[#8b5cf6]">({p.code})</span>
-                </div>
-                <div className="text-sm text-[var(--color-text-muted)]">
-                  {p.fullName}
-                </div>
+                {editingProgrammeId === p.id ? (
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Input
+                      value={editProgrammeForm.code}
+                      onChange={(e) =>
+                        setEditProgrammeForm((prev) => ({
+                          ...prev,
+                          code: e.target.value,
+                        }))
+                      }
+                      className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                    />
+                    <Input
+                      value={editProgrammeForm.name}
+                      onChange={(e) =>
+                        setEditProgrammeForm((prev) => ({
+                          ...prev,
+                          name: e.target.value,
+                        }))
+                      }
+                      className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                    />
+                    <Input
+                      value={editProgrammeForm.fullName}
+                      onChange={(e) =>
+                        setEditProgrammeForm((prev) => ({
+                          ...prev,
+                          fullName: e.target.value,
+                        }))
+                      }
+                      className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-lg font-semibold text-[var(--color-text-primary)]">
+                      {p.name}{" "}
+                      <span className="text-sm text-[#8b5cf6]">({p.code})</span>
+                    </div>
+                    <div className="text-sm text-[var(--color-text-muted)]">
+                      {p.fullName}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {editingProgrammeId === p.id ? (
+                  <>
+                    <Button size="sm" onClick={saveProgramme}>
+                      Save Programme
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingProgrammeId(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => beginProgrammeEdit(p)}
+                  >
+                    <PencilSquareIcon className="w-4 h-4 mr-1" /> Edit
+                  </Button>
+                )}
               </div>
             </div>
             {p.batches.map((b) => (
@@ -746,36 +955,123 @@ function ProgrammesTab() {
                 key={b.id}
                 className="pt-3 mt-3 border-t border-[var(--color-border)]"
               >
-                <div className="font-semibold text-sm text-[var(--color-text-primary)]">
-                  {b.name}
-                </div>
-                {b.terms && b.terms.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {b.terms.map((t) => (
-                      <Badge
-                        key={t.id}
-                        variant="outline"
-                        className="text-green-500 border-green-500/30 bg-green-500/10"
-                      >
-                        T{t.number}
-                        {t.isActive ? " ●" : ""}
-                      </Badge>
-                    ))}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-sm text-[var(--color-text-primary)]">
+                      {b.name}
+                    </div>
+                    <div className="text-xs mt-1 text-[var(--color-text-muted)]">
+                      {b._count.students} students · Divs:{" "}
+                      {b.divisions.map((d) => d.name).join(", ") || "—"}
+                    </div>
                   </div>
-                )}
-                <div className="text-xs mt-1 text-[var(--color-text-muted)]">
-                  {b._count.students} students · Divs:{" "}
-                  {b.divisions.map((d) => d.name).join(", ") || "—"}
-                </div>
-                {b.activeTermId && (
-                  <div className="mt-2">
+                  <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
-                      className="text-green-500 border-green-500/30 bg-green-500/10"
+                      className={
+                        b.isActive
+                          ? "text-green-500 border-green-500/30 bg-green-500/10"
+                          : "text-slate-500 border-slate-500/30 bg-slate-500/10"
+                      }
                     >
-                      Active: T
-                      {b.terms?.find((t) => t.id === b.activeTermId)?.number}
+                      {b.isActive ? "Open" : "Closed"}
                     </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleBatchStatus(b)}
+                    >
+                      {b.isActive ? "Close Batch" : "Reopen Batch"}
+                    </Button>
+                  </div>
+                </div>
+                {b.terms && b.terms.length > 0 && (
+                  <div className="mt-3 grid gap-2">
+                    {b.terms.map((t) => {
+                      const termIsActive =
+                        t.isActive || b.activeTermId === t.id;
+                      const termDraft = getTermDraft(t);
+                      return (
+                        <div
+                          key={t.id}
+                          className={`rounded-lg border p-3 ${
+                            termIsActive
+                              ? "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]"
+                              : "border-[var(--color-border)] bg-[var(--color-bg-secondary)]"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  termIsActive
+                                    ? "text-emerald-700 border-emerald-500/40 bg-emerald-500/20"
+                                    : "text-[var(--color-text-muted)]"
+                                }
+                              >
+                                T{t.number}
+                              </Badge>
+                              <span className="text-sm text-[var(--color-text-primary)]">
+                                {t.name}
+                              </span>
+                              {termIsActive && (
+                                <Badge className="text-[10px] bg-emerald-600 text-white border-emerald-700">
+                                  Active Term
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setActiveTerm(t, !termIsActive)}
+                              >
+                                {termIsActive ? "Clear Active" : "Set Active"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => saveTermDates(t)}
+                              >
+                                Save Dates
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <div>
+                              <FieldLabel text="Start Date" />
+                              <Input
+                                type="date"
+                                value={termDraft.startDate}
+                                onChange={(e) =>
+                                  setTermDraftField(
+                                    t,
+                                    "startDate",
+                                    e.target.value,
+                                  )
+                                }
+                                className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                              />
+                            </div>
+                            <div>
+                              <FieldLabel text="End Date" />
+                              <Input
+                                type="date"
+                                value={termDraft.endDate}
+                                onChange={(e) =>
+                                  setTermDraftField(
+                                    t,
+                                    "endDate",
+                                    e.target.value,
+                                  )
+                                }
+                                className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -785,96 +1081,157 @@ function ProgrammesTab() {
       ))}
       <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
         <CardContent className="p-4">
-          <h3 className="text-sm font-semibold mb-4 text-[var(--color-text-secondary)]">
-            Quick Add
-          </h3>
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <FieldLabel text="Add Batch" />
-              <div className="flex gap-2 flex-wrap">
-                <Select
-                  value={batchForm.programmeId}
-                  onValueChange={(v: string) =>
-                    setBatchForm({ ...batchForm, programmeId: v })
-                  }
-                >
-                  <SelectTrigger className="flex-1 bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
-                    <SelectValue placeholder="Programme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {programmes.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  style={{ width: 70 }}
-                  placeholder="Start"
-                  value={batchForm.startYear}
-                  onChange={(e) =>
-                    setBatchForm({ ...batchForm, startYear: e.target.value })
-                  }
-                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
-                />
-                <Input
-                  style={{ width: 70 }}
-                  placeholder="End"
-                  value={batchForm.endYear}
-                  onChange={(e) =>
-                    setBatchForm({ ...batchForm, endYear: e.target.value })
-                  }
-                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
-                />
-                <Input
-                  style={{ flex: 1 }}
-                  placeholder="Name"
-                  value={batchForm.name}
-                  onChange={(e) =>
-                    setBatchForm({ ...batchForm, name: e.target.value })
-                  }
-                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
-                />
-                <Button size="sm" onClick={addBatch} className="">
-                  Add
-                </Button>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-secondary)]">
+              Quick Add
+            </h3>
+            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+              Create a new batch or term without leaving this screen.
+            </p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Add Batch
+                </h4>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Pick a programme, define the year range, and give the batch a
+                  clear label.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <FieldLabel text="Programme" />
+                  <Select
+                    value={batchForm.programmeId}
+                    onValueChange={(v: string) =>
+                      setBatchForm({ ...batchForm, programmeId: v })
+                    }
+                  >
+                    <SelectTrigger className="bg-[var(--color-bg-card)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                      <SelectValue placeholder="Select programme" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programmes.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name} ({p.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel text="Start Year" />
+                  <Input
+                    placeholder="2026"
+                    value={batchForm.startYear}
+                    onChange={(e) =>
+                      setBatchForm({ ...batchForm, startYear: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel text="End Year" />
+                  <Input
+                    placeholder="2028"
+                    value={batchForm.endYear}
+                    onChange={(e) =>
+                      setBatchForm({ ...batchForm, endYear: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <FieldLabel text="Batch Name" />
+                  <Input
+                    placeholder="PGDM 2026-28"
+                    value={batchForm.name}
+                    onChange={(e) =>
+                      setBatchForm({ ...batchForm, name: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={addBatch}>Create Batch</Button>
               </div>
             </div>
-            <div>
-              <FieldLabel text="Add Term" />
-              <div className="flex gap-2">
-                <Select
-                  value={termForm.batchId}
-                  onValueChange={(v: string) =>
-                    setTermForm({ ...termForm, batchId: v })
-                  }
-                >
-                  <SelectTrigger className="flex-1 bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
-                    <SelectValue placeholder="Batch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {programmes.flatMap((p) =>
-                      p.batches.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {p.name} — {b.name}
-                        </SelectItem>
-                      )),
-                    )}
-                  </SelectContent>
-                </Select>
-                <Input
-                  style={{ width: 60 }}
-                  placeholder="#"
-                  value={termForm.number}
-                  onChange={(e) =>
-                    setTermForm({ ...termForm, number: e.target.value })
-                  }
-                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
-                />
-                <Button size="sm" onClick={addTerm} className="">
-                  Add
-                </Button>
+
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Add Term
+                </h4>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Attach a numbered term to a batch and optionally define its
+                  scheduling window.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <FieldLabel text="Batch" />
+                  <Select
+                    value={termForm.batchId}
+                    onValueChange={(v: string) =>
+                      setTermForm({ ...termForm, batchId: v })
+                    }
+                  >
+                    <SelectTrigger className="bg-[var(--color-bg-card)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                      <SelectValue placeholder="Select batch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programmes.flatMap((p) =>
+                        p.batches.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {p.name} - {b.name}
+                          </SelectItem>
+                        )),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel text="Term Number" />
+                  <Input
+                    placeholder="1"
+                    value={termForm.number}
+                    onChange={(e) =>
+                      setTermForm({ ...termForm, number: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div className="flex items-end text-xs text-[var(--color-text-muted)] pb-2">
+                  Example: use 1, 2, 3 to match your academic sequence.
+                </div>
+                <div>
+                  <FieldLabel text="Start Date" />
+                  <Input
+                    type="date"
+                    value={termForm.startDate}
+                    onChange={(e) =>
+                      setTermForm({ ...termForm, startDate: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel text="End Date" />
+                  <Input
+                    type="date"
+                    value={termForm.endDate}
+                    onChange={(e) =>
+                      setTermForm({ ...termForm, endDate: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={addTerm}>Create Term</Button>
               </div>
             </div>
           </div>

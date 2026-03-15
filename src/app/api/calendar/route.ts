@@ -15,31 +15,34 @@ export async function GET(req: Request) {
   try {
     const cookieStore = await cookies();
     const session = cookieStore.get("session");
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const user = JSON.parse(session.value);
 
     const url = new URL(req.url);
-    const role           = url.searchParams.get("role") || user.role;
+    const role = url.searchParams.get("role") || user.role;
     const divisionIdParam = url.searchParams.get("divisionId");
-    const groupIdParam    = url.searchParams.get("groupId");
-    const weekOfParam     = url.searchParams.get("weekOf");
+    const groupIdParam = url.searchParams.get("groupId");
+    const weekOfParam = url.searchParams.get("weekOf");
 
-    // Compute Mon–Sat week dates
-    const refDate    = weekOfParam ? new Date(weekOfParam) : new Date();
-    const dayOfWeek  = refDate.getDay();
-    const monday     = new Date(refDate);
+    // Compute Mon-Sun week dates
+    const refDate = weekOfParam ? new Date(weekOfParam) : new Date();
+    const dayOfWeek = refDate.getDay();
+    const monday = new Date(refDate);
     monday.setDate(refDate.getDate() + (dayOfWeek === 0 ? -6 : 1 - dayOfWeek));
-    const saturday = new Date(monday);
-    saturday.setDate(monday.getDate() + 5);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
 
     const weekDates: string[] = [];
-    for (let d = new Date(monday); d <= saturday; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(monday); d <= sunday; d.setDate(d.getDate() + 1)) {
       weekDates.push(d.toISOString().split("T")[0]);
     }
 
     // Visibility filter
     const visibilityFilter =
-      role === "student" ? { visibility: { in: ["confirmed", "tentative"] } } : {};
+      role === "student"
+        ? { visibility: { in: ["confirmed", "tentative"] } }
+        : {};
 
     type TimetableWhere = {
       date: { in: string[] };
@@ -49,7 +52,10 @@ export async function GET(req: Request) {
       groupId?: string;
     };
 
-    let whereClause: TimetableWhere = { date: { in: weekDates }, ...visibilityFilter };
+    let whereClause: TimetableWhere = {
+      date: { in: weekDates },
+      ...visibilityFilter,
+    };
 
     if (role === "student") {
       const divisionId: string = user.divisionId;
@@ -80,9 +86,10 @@ export async function GET(req: Request) {
         faculty: true,
         room: true,
         slot: true,
-        attendance: role === "student"
-          ? { where: { studentId: user.studentId } }
-          : { select: { id: true, status: true } },
+        attendance:
+          role === "student"
+            ? { where: { studentId: user.studentId } }
+            : { select: { id: true, status: true } },
         _count: { select: { attendance: true } },
       },
       orderBy: [{ date: "asc" }, { slotNumber: "asc" }],
@@ -93,38 +100,41 @@ export async function GET(req: Request) {
       return {
         date,
         dayOfWeek: (i + 1) % 7,
-        dayName: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i],
+        dayName: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i],
         slots: dayEntries.map((entry) => ({
-          slotNumber:  entry.slotNumber,
-          startTime:   entry.slot.startTime,
-          endTime:     entry.slot.endTime,
-          courseCode:  entry.course.code,
-          courseName:  entry.course.name,
-          courseType:  entry.course.type,
+          slotNumber: entry.slotNumber,
+          startTime: entry.slot.startTime,
+          endTime: entry.slot.endTime,
+          courseCode: entry.course.code,
+          courseName: entry.course.name,
+          courseType: entry.course.type,
           divisionName: entry.division?.name ?? entry.group?.name ?? "",
-          divisionId:  entry.divisionId,
-          groupId:     entry.groupId,
+          divisionId: entry.divisionId,
+          groupId: entry.groupId,
           facultyName: entry.faculty?.name ?? null,
-          hasSession:  entry.isConducted,
-          sessionId:   entry.id,
+          hasSession: entry.isConducted,
+          sessionId: entry.id,
           sessionNumber: entry.sessionNumber ?? null,
-          attendance:  entry.attendance ?? [],
-          noSwipes:    entry.isConducted ? entry._count.attendance === 0 : false,
-          roomName:    entry.room?.name ?? null,
-          visibility:  entry.visibility,
+          attendance: entry.attendance ?? [],
+          noSwipes: entry.isConducted ? entry._count.attendance === 0 : false,
+          roomName: entry.room?.name ?? null,
+          visibility: entry.visibility,
           activityType: entry.activityType,
         })),
       };
     });
 
     return NextResponse.json({
-      weekOf:    weekDates[0],
-      weekEnd:   weekDates[weekDates.length - 1],
+      weekOf: weekDates[0],
+      weekEnd: weekDates[weekDates.length - 1],
       weekDates,
       calendar,
     });
   } catch (error) {
     console.error("Calendar error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }
