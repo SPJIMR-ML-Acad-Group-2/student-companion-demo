@@ -7,37 +7,49 @@ export async function GET(req: NextRequest) {
   const sessionId = req.nextUrl.searchParams.get("sessionId");
   if (!sessionId) return NextResponse.json({ error: "sessionId required" }, { status: 400 });
 
-  const timetable = await (prisma.timetable.findUnique as any)({
-    where: { id: parseInt(sessionId) },
+  const timetable = await prisma.timetable.findUnique({
+    where: { id: sessionId },
     include: {
       course: true,
       division: {
         include: {
-          coreStudents: { orderBy: { rollNumber: "asc" } },
-          specStudents: { orderBy: { rollNumber: "asc" } },
+          students: { orderBy: { rollNumber: "asc" }, include: { user: true } },
         },
       },
-      attendance: { include: { student: true } },
+      group: {
+        include: {
+          members: {
+            orderBy: { student: { rollNumber: "asc" } },
+            include: { student: { include: { user: true } } },
+          },
+        },
+      },
+      attendance: { include: { student: { include: { user: true } } } },
     },
-  }) as any;
+  });
 
   if (!timetable) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-  const students: any[] = timetable.division.type === "core"
-    ? timetable.division.coreStudents
-    : timetable.division.specStudents;
+  // Collect students from either division or group
+  const students: Array<{ id: string; name: string; rollNumber: string | null }> =
+    timetable.division
+      ? timetable.division.students.map((s) => ({ id: s.id, name: s.user.name, rollNumber: s.rollNumber }))
+      : timetable.group
+      ? timetable.group.members.map((m) => ({ id: m.student.id, name: m.student.user.name, rollNumber: m.student.rollNumber }))
+      : [];
 
-  const attendanceMap = new Map<number, any>(timetable.attendance.map((a: any) => [a.studentId, a]));
+  const attendanceMap = new Map(timetable.attendance.map((a) => [a.studentId, a]));
 
-  const records = students.map((s: any) => {
+  const records = students.map((s) => {
     const att = attendanceMap.get(s.id);
     return {
       studentId:    s.id,
-      studentName:  s.name, // Fixed: This needs to map to studentName so the UI can render `r.studentName`
+      studentName:  s.name,
       rollNumber:   s.rollNumber,
-      attendanceId: att?.id    || null,
-      status:       att?.status || "None",
-      swipeTime:    att?.swipeTime || null,
+      attendanceId: att?.id    ?? null,
+      status:       att?.status ?? "None",
+      swipeTime:    att?.swipeTime ?? null,
+      remarks:      att?.remarks ?? null,
     };
   });
 
@@ -46,25 +58,26 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { sessionId, studentId, status } = body;
+  const { sessionId, studentId, status, remarks } = body;
   if (!sessionId || !studentId || !status) {
     return NextResponse.json({ error: "sessionId, studentId, status required" }, { status: 400 });
   }
 
   try {
     const att = await prisma.attendance.upsert({
-      where: { timetableId_studentId: { timetableId: parseInt(sessionId), studentId: parseInt(studentId) } },
-      update: { status },
-      create: { timetableId: parseInt(sessionId), studentId: parseInt(studentId), status },
+      where: { timetableId_studentId: { timetableId: sessionId, studentId } },
+      update: { status, ...(remarks !== undefined ? { remarks } : {}) },
+      create: { timetableId: sessionId, studentId, status, remarks: remarks ?? null },
     });
 
     await prisma.timetable.update({
-      where: { id: parseInt(sessionId) },
+      where: { id: sessionId },
       data: { isConducted: true },
     });
 
     return NextResponse.json(att);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

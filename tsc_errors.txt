@@ -1,0 +1,5 @@
+src/app/api/admin/terms/route.ts(22,40): error TS2353: Object literal may only specify known properties, and 'startDate' does not exist in type '(Without<TermCreateInput, TermUncheckedCreateInput> & TermUncheckedCreateInput) | (Without<...> & TermCreateInput)'.
+src/app/office/manage/page.tsx(248,14): error TS2339: Property 'Term' does not exist on type 'Programme'.
+src/app/office/manage/page.tsx(248,24): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/app/office/manage/page.tsx(259,86): error TS2339: Property 'Term' does not exist on type 'Programme'.
+src/app/office/manage/page.tsx(259,97): error TS7006: Parameter 't' implicitly has an 'any' type.

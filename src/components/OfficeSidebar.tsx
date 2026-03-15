@@ -1,18 +1,30 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { ThemeToggle } from "./ThemeToggle";
+import {
+  ChartBarSquareIcon,
+  Cog6ToothIcon,
+  ClipboardDocumentCheckIcon,
+  BookOpenIcon,
+  ArrowLeftStartOnRectangleIcon,
+  CalendarDaysIcon,
+} from "@heroicons/react/24/outline";
 
 interface Props {
   userName: string;
+  open: boolean;
+  onClose: () => void;
 }
 
 const NAV = [
-  { href: "/office",            icon: "📊", label: "Dashboard"  },
-  { href: "/office/manage",     icon: "⚙️", label: "Manage"     },
-  { href: "/office/attendance", icon: "✅", label: "Attendance" },
+  { href: "/office",              Icon: ChartBarSquareIcon,           label: "Dashboard"   },
+  { href: "/office/manage",       Icon: Cog6ToothIcon,                label: "Manage"      },
+  { href: "/office/attendance",   Icon: ClipboardDocumentCheckIcon,   label: "Attendance"  },
+  { href: "/office/timetable",    Icon: CalendarDaysIcon,             label: "Timetable"   },
 ];
 
-export default function OfficeSidebar({ userName }: Props) {
+export default function OfficeSidebar({ userName, open, onClose }: Props) {
   const pathname = usePathname();
   const router   = useRouter();
 
@@ -22,68 +34,80 @@ export default function OfficeSidebar({ userName }: Props) {
   };
 
   return (
-    <aside
-      className="fixed top-0 left-0 bottom-0 z-10 flex flex-col"
-      style={{ width: 260, background: "var(--color-bg-secondary)", borderRight: "1px solid var(--color-border)", padding: "24px 16px" }}
-    >
+    <>
+      {open && (
+        <div className="fixed inset-0 z-20 bg-black/40 md:hidden" onClick={onClose} />
+      )}
+      <aside
+        className={`fixed top-0 left-0 bottom-0 z-30 flex flex-col bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] px-4 py-6 w-[260px] transition-transform duration-200 md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+      >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-2 mb-8">
         <div
-          className="flex items-center justify-center text-lg shrink-0"
-          style={{ width: 36, height: 36, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: 10 }}
+          className="flex items-center justify-center shrink-0 w-9 h-9 rounded-xl"
+          style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
         >
-          📚
+          <BookOpenIcon className="w-5 h-5 text-white" />
         </div>
-        <h2 className="text-base font-bold" style={{ color: "var(--color-text-primary)" }}>Companion</h2>
+        <h2 className="text-sm font-bold text-[var(--color-text-primary)] leading-tight">
+          Classroom<br />
+          <span className="font-normal text-[var(--color-text-muted)]">Companion</span>
+        </h2>
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-col gap-1 flex-1">
-        {NAV.map(({ href, icon, label }) => {
-          const active = pathname === href || (href !== "/office" && pathname.startsWith(href));
+      <nav className="flex flex-col gap-0.5 flex-1">
+        {NAV.map(({ href, Icon, label }) => {
+          const active =
+            pathname === href ||
+            (href !== "/office" && pathname.startsWith(href));
           return (
             <a
               key={href}
               href={href}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded text-sm font-medium transition-colors no-underline"
-              style={{
-                color:      active ? "var(--color-accent-sec)" : "var(--color-text-secondary)",
-                background: active ? "var(--color-accent-glow)" : "transparent",
-                borderRadius: "var(--radius-xs)",
-              }}
-              onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--color-bg-card)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-primary)"; } }}
-              onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; } }}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors no-underline ${
+                active
+                  ? "text-white bg-[#531f75]"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-card)] hover:text-[var(--color-text-primary)]"
+              }`}
             >
-              <span className="text-lg w-6 text-center shrink-0">{icon}</span>
+              <Icon className="w-4.5 h-4.5 shrink-0" style={{ width: "18px", height: "18px" }} />
               {label}
             </a>
           );
         })}
       </nav>
 
-      {/* User */}
-      <div
-        className="flex items-center gap-2.5 pt-4"
-        style={{ borderTop: "1px solid var(--color-border)" }}
-      >
+      {/* Theme toggle */}
+      <div className="mb-4">
+        <ThemeToggle />
+      </div>
+
+      {/* User footer */}
+      <div className="flex items-center gap-2.5 pt-4 border-t border-[var(--color-border)]">
         <div
-          className="flex items-center justify-center text-sm font-semibold text-white shrink-0"
-          style={{ width: 36, height: 36, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: "50%" }}
+          className="flex items-center justify-center text-sm font-bold text-white shrink-0 w-9 h-9 rounded-full"
+          style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
         >
           {userName[0]}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>{userName}</div>
-          <div className="text-[11px] uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>Programme Office</div>
+          <div className="text-xs font-semibold truncate text-[var(--color-text-primary)]">
+            {userName}
+          </div>
+          <div className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
+            Programme Office
+          </div>
         </div>
         <button
           onClick={handleLogout}
-          className="px-2.5 py-1.5 text-xs rounded cursor-pointer transition-colors shrink-0"
-          style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)", fontFamily: "inherit" }}
+          title="Sign out"
+          className="p-1.5 rounded-lg cursor-pointer transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-bg)]"
         >
-          ↩
+          <ArrowLeftStartOnRectangleIcon style={{ width: "16px", height: "16px" }} />
         </button>
       </div>
     </aside>
+    </>
   );
 }

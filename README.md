@@ -33,23 +33,28 @@ Classroom Companion is a comprehensive web-based attendance tracking and analyti
 - A [Supabase](https://supabase.com) account and project
 
 ### 2. Environment Variables
-Create a `.env` file in the root of the project:
+Create a `.env` file in the root of the project using [.env.example](file:///.env.example) as a template.
+
+**Local Development (Default):**
+Uses SQLite. No database setup required.
+
+**Production / Manual Supabase Switch:**
+If you want to use Supabase locally, set `DB_TYPE=postgres` in your `.env` and provide these URLs:
 ```env
-# Required for Prisma connection pooling (App usage)
+DB_TYPE="postgres"
 DATABASE_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true"
-
-# Required for Prisma Migrations (Direct connection)
 DIRECT_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres"
-
-# Authentication variables
-SESSION_SECRET="your-super-secret-key-change-in-production"
 ```
-> **Note:** To get the Supabase connection strings, go to your Supabase Dashboard → Project Settings → Database. Ensure `DATABASE_URL` uses the **Session Pooler** (port 6543) and `DIRECT_URL` uses the **Direct Connection** (port 5432).
+> **Note:** Ensure `DATABASE_URL` uses the **Session Pooler** (port 6543) and `DIRECT_URL` uses the **Direct Connection** (port 5432).
 
 ### 3. Database Setup & Seeding
-Install dependencies and sync the schema to your Supabase PostgreSQL database:
+Install dependencies. This will automatically configure the correct database (SQLite for local, PostgreSQL for Vercel/GitHub):
 ```bash
 npm install
+```
+
+If you need to manually reset or re-generate the schema:
+```bash
 npx prisma generate
 npx prisma db push
 ```

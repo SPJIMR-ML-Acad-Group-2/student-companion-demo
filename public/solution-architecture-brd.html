@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Companion — Solution Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #f0f4f8;
+    padding: 36px 40px 40px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 21px;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 5px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 12.5px;
+    color: #718096;
+    margin-bottom: 32px;
+  }
+
+  .diagram {
+    width: 1120px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .layer {
+    display: flex;
+    align-items: stretch;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: visible;
+  }
+
+  .layer-label {
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #fff;
+    padding: 12px 8px;
+    border-radius: 10px 0 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+  }
+
+  .layer-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border-radius: 0 10px 10px 0;
+  }
+
+  .layer-users    .layer-label { background: #4299e1; }
+  .layer-users    .layer-content { background: #ebf8ff; border: 1.5px solid #bee3f8; border-left: none; }
+
+  .layer-frontend .layer-label { background: #805ad5; }
+  .layer-frontend .layer-content { background: #faf5ff; border: 1.5px solid #e9d8fd; border-left: none; }
+
+  .layer-api      .layer-label { background: #38a169; }
+  .layer-api      .layer-content { background: #f0fff4; border: 1.5px solid #c6f6d5; border-left: none; }
+
+  .layer-data     .layer-label { background: #d69e2e; }
+  .layer-data     .layer-content { background: #fffff0; border: 1.5px solid #fefcbf; border-left: none; }
+
+  .layer-ext      .layer-label { background: #e53e3e; }
+  .layer-ext      .layer-content { background: #fff5f5; border: 1.5px solid #fed7d7; border-left: none; }
+
+  .box {
+    border-radius: 9px;
+    border: 1.8px solid transparent;
+    padding: 10px 14px;
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+  .box-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+  .box-desc {
+    font-size: 10.5px;
+    color: #4a5568;
+    line-height: 1.6;
+  }
+
+  .b-blue   { background:#fff; border-color:#63b3ed; }
+  .b-blue   .box-title { color: #2b6cb0; }
+
+  .b-purple { background:#fff; border-color:#b794f4; }
+  .b-purple .box-title { color: #553c9a; }
+
+  .b-green  { background:#fff; border-color:#68d391; }
+  .b-green  .box-title { color: #276749; }
+
+  .b-yellow { background:#fff; border-color:#f6e05e; }
+  .b-yellow .box-title { color: #975a16; }
+
+  .b-red    { background:#fff; border-color:#fc8181; }
+  .b-red    .box-title { color: #9b2c2c; }
+
+  .b-gray   { background:#fff; border-color:#a0aec0; }
+  .b-gray   .box-title { color: #2d3748; }
+
+  .arrows {
+    display: flex;
+    justify-content: center;
+    gap: 80px;
+    margin: -4px 0;
+    padding: 0 34px;
+  }
+  .arrow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+  .arrow-line {
+    width: 1.8px;
+    height: 16px;
+    background: #a0aec0;
+  }
+  .arrow-head {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid #a0aec0;
+  }
+  .arrow-label {
+    font-size: 9.5px;
+    color: #718096;
+    position: absolute;
+    left: 10px;
+    top: 0px;
+    white-space: nowrap;
+  }
+
+  .legend {
+    width: 1120px;
+    margin: 16px auto 0;
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    color: #4a5568;
+  }
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+  }
+
+  .group-divider {
+    width: 1.5px;
+    align-self: stretch;
+    background: #e2e8f0;
+    margin: 0 4px;
+    border-radius: 2px;
+  }
+  .group-label {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #a0aec0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .box-row { display: flex; gap: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<h1>Student Companion — Solution Architecture</h1>
+<p class="subtitle">Layered architecture overview &nbsp;|&nbsp; SPJIMR Timetable &amp; Attendance Platform</p>
+
+<div class="diagram">
+
+  <!-- ═══════════════ USERS ═══════════════ -->
+  <div class="layer layer-users">
+    <div class="layer-label">Users</div>
+    <div class="layer-content" style="gap:20px;">
+
+      <div class="box b-blue" style="min-width:155px;">
+        <div class="box-title">Students</div>
+        <div class="box-desc">View personalised timetable<br>Check attendance records<br>Browse course schedule</div>
+      </div>
+
+      <div class="box b-blue" style="min-width:155px;">
+        <div class="box-title">Programme Office</div>
+        <div class="box-desc">Manage timetable &amp; drafts<br>Review &amp; record attendance<br>Maintain academic data</div>
+      </div>
+
+      <div class="box b-blue" style="min-width:155px;">
+        <div class="box-title">Faculty</div>
+        <div class="box-desc">Referenced in class scheduling<br>Linked to courses &amp; sessions<br>Future: direct portal access</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- arrows -->
+  <div class="arrows">
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div><span class="arrow-label">Web browser</span></div>
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+  </div>
+
+  <!-- ═══════════════ USER INTERFACE ═══════════════ -->
+  <div class="layer layer-frontend">
+    <div class="layer-label">User Interface</div>
+    <div class="layer-content">
+
+      <div style="flex:1;">
+        <div class="group-label">Student Portal</div>
+        <div class="box-row">
+          <div class="box b-purple" style="min-width:145px;">
+            <div class="box-title">Timetable View</div>
+            <div class="box-desc">Weekly calendar view<br>Core &amp; elective sessions</div>
+          </div>
+          <div class="box b-purple" style="min-width:145px;">
+            <div class="box-title">Attendance View</div>
+            <div class="box-desc">Attendance percentage<br>per course &amp; session</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="group-divider"></div>
+
+      <div style="flex:1;">
+        <div class="group-label">Office / Admin Portal</div>
+        <div class="box-row">
+          <div class="box b-purple" style="min-width:140px;">
+            <div class="box-title">Timetable Builder</div>
+            <div class="box-desc">Draft, review &amp; publish<br>class schedules; ERP export</div>
+          </div>
+          <div class="box b-purple" style="min-width:140px;">
+            <div class="box-title">Attendance Manager</div>
+            <div class="box-desc">Upload swipe records<br>Manual mark &amp; override</div>
+          </div>
+          <div class="box b-purple" style="min-width:140px;">
+            <div class="box-title">Master Data Manager</div>
+            <div class="box-desc">Programmes, batches,<br>courses, faculty, rooms</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- arrows -->
+  <div class="arrows" style="gap:120px;">
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div><span class="arrow-label">Secure data requests</span></div>
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+  </div>
+
+  <!-- ═══════════════ BUSINESS SERVICES ═══════════════ -->
+  <div class="layer layer-api">
+    <div class="layer-label">Business Services</div>
+    <div class="layer-content" style="gap:12px; flex-wrap:wrap;">
+
+      <div class="box b-green" style="min-width:148px;">
+        <div class="box-title">User Authentication</div>
+        <div class="box-desc">Secure login for students<br>and staff; role-based<br>access control</div>
+      </div>
+
+      <div class="box b-green" style="min-width:148px;">
+        <div class="box-title">Schedule Service</div>
+        <div class="box-desc">Delivers the right timetable<br>to each user based on their<br>division &amp; group</div>
+      </div>
+
+      <div class="box b-green" style="min-width:148px;">
+        <div class="box-title">Timetable Management</div>
+        <div class="box-desc">Supports drafting, reviewing<br>and publishing of class<br>schedules with conflict checks</div>
+      </div>
+
+      <div class="box b-green" style="min-width:148px;">
+        <div class="box-title">Attendance Processing</div>
+        <div class="box-desc">Records student presence<br>from swipe data or<br>manual entry by office</div>
+      </div>
+
+      <div class="box b-green" style="min-width:148px;">
+        <div class="box-title">ERP Integration</div>
+        <div class="box-desc">Prepares timetable data<br>in the format required<br>by the institution's ERP</div>
+      </div>
+
+      <div class="box b-green" style="min-width:148px;">
+        <div class="box-title">Academic Data Management</div>
+        <div class="box-desc">Manages programmes,<br>batches, courses,<br>faculty &amp; rooms</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- arrows -->
+  <div class="arrows" style="gap:180px;">
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div><span class="arrow-label">Secure data access</span></div>
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+  </div>
+
+  <!-- ═══════════════ INFORMATION STORAGE ═══════════════ -->
+  <div class="layer layer-data">
+    <div class="layer-label">Information Storage</div>
+    <div class="layer-content" style="gap:16px;">
+
+      <div class="box b-yellow" style="min-width:210px;">
+        <div class="box-title">Central Data Store</div>
+        <div class="box-desc">All student, timetable and<br>attendance information stored<br>securely in a structured database</div>
+      </div>
+
+      <div class="box b-yellow" style="min-width:190px;">
+        <div class="box-title">User Session Management</div>
+        <div class="box-desc">Remembers who is logged in,<br>their role and class assignments<br>for the duration of a session</div>
+      </div>
+
+      <div class="box b-yellow" style="min-width:190px;">
+        <div class="box-title">Document Processing</div>
+        <div class="box-desc">Handles uploaded attendance<br>files and generates timetable<br>export documents</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- arrows to external -->
+  <div class="arrows" style="gap:200px; margin-top:4px;">
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div><span class="arrow-label">File transfer</span></div>
+    <div class="arrow-col"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+  </div>
+
+  <!-- ═══════════════ EXTERNAL SYSTEMS ═══════════════ -->
+  <div class="layer layer-ext">
+    <div class="layer-label">External Systems</div>
+    <div class="layer-content" style="gap:16px;">
+
+      <div class="box b-red" style="min-width:200px;">
+        <div class="box-title">ERP System</div>
+        <div class="box-desc">Receives timetable data<br>exported from the platform<br>in the required ERP format</div>
+      </div>
+
+      <div class="box b-red" style="min-width:200px;">
+        <div class="box-title">Biometric Attendance System</div>
+        <div class="box-desc">Student entry swipe data is<br>exported and uploaded to the<br>platform for attendance marking</div>
+      </div>
+
+      <div class="box b-gray" style="min-width:200px;">
+        <div class="box-title">Cloud Hosting</div>
+        <div class="box-desc">Hosts the platform and keeps<br>it available to all users<br>at all times</div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /diagram -->
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#4299e1;"></div> Users</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#805ad5;"></div> User Interface</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#38a169;"></div> Business Services</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d69e2e;"></div> Information Storage</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#e53e3e;"></div> External Systems</div>
+</div>
+
+</body>
+</html>

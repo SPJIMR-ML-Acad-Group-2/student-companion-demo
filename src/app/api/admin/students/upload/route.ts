@@ -13,15 +13,20 @@ export async function POST(req: NextRequest) {
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: "array" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: "" });
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, {
+      defval: "",
+    });
 
-    // Expected columns: Name, Email, Roll Number, Batch (name), Core Division (name), Specialisation (code), Spec Division (name)
+    // Expected columns: Name, Email, Roll Number, Batch (name), Division (name), Specialisation (code), Group (name)
     const results = { created: 0, skipped: 0, errors: [] as string[] };
 
     // Pre-fetch lookups
     const batches = await prisma.batch.findMany();
     const divisions = await prisma.division.findMany();
     const specialisations = await prisma.specialisation.findMany();
+    const groups = await prisma.group.findMany({
+      include: { allowedBatches: true },
+    });
 
     for (const row of rows) {
       const name = (row["Name"] || "").trim();
@@ -36,38 +41,68 @@ export async function POST(req: NextRequest) {
 
       // Resolve foreign keys
       const batchName = (row["Batch"] || "").trim();
-      const batch = batches.find(b => b.name === batchName);
+      const batch = batches.find((b) => b.name === batchName);
 
-      const coreDivName = (row["Core Division"] || "").trim();
-      const coreDivision = divisions.find(d => d.name === coreDivName && d.type === "core");
+      const divName = (row["Core Division"] || row["Division"] || "").trim();
+      const division = divisions.find(
+        (d) => d.name === divName && (!batch || d.batchId === batch.id),
+      );
 
       const specCode = (row["Specialisation"] || "").trim();
-      const spec = specialisations.find(s => s.code === specCode || s.name === specCode);
+      const spec = specialisations.find(
+        (s) => s.code === specCode || s.name === specCode,
+      );
 
-      const specDivName = (row["Spec Division"] || "").trim();
-      const specDiv = divisions.find(d => d.name === specDivName && d.type === "specialisation");
+      const groupName = (row["Group"] || row["Spec Group"] || "").trim();
+      const group = groups.find((g) => {
+        if (g.name !== groupName) return false;
+        if (!batch) return true;
+        const allowedBatchIds =
+          g.allowedBatches.length > 0
+            ? g.allowedBatches.map((link) => link.batchId)
+            : [g.batchId];
+        return allowedBatchIds.includes(batch.id);
+      });
 
       try {
-        // Check if already exists
-        const existing = await prisma.user.findFirst({
-          where: { OR: [{ rollNumber }, { email }] },
+        // Check if User already exists
+        const existingUser = await prisma.user.findFirst({
+          where: { email },
         });
+        const existingStudent = rollNumber
+          ? await prisma.student.findUnique({ where: { rollNumber } })
+          : null;
 
-        if (existing) {
+        if (existingUser || existingStudent) {
           results.errors.push(`Skipped ${rollNumber}: already exists`);
           results.skipped++;
           continue;
         }
 
-        await prisma.user.create({
+        if (!batch || !division) {
+          results.errors.push(
+            `Skipped ${rollNumber}: batch or division not found`,
+          );
+          results.skipped++;
+          continue;
+        }
+
+        // Create User (auth) then Student (academic)
+        const user = await prisma.user.create({
+          data: { name, email, role: "student" },
+        });
+
+        await prisma.student.create({
           data: {
-            name, email, rollNumber, role: "student",
-            batchId: batch?.id || null,
-            coreDivisionId: coreDivision?.id || null,
-            specialisationId: spec?.id || null,
-            specDivisionId: specDiv?.id || null,
+            userId: user.id,
+            rollNumber,
+            batchId: batch.id,
+            divisionId: division.id,
+            specialisationId: spec?.id ?? null,
+            groups: group ? { create: [{ groupId: group.id }] } : undefined,
           },
         });
+
         results.created++;
       } catch (err) {
         results.errors.push(`Error: ${rollNumber} - ${err}`);
@@ -78,6 +113,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, results });
   } catch (error) {
     console.error("Bulk upload error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

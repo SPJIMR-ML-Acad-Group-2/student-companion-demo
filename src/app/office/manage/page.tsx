@@ -1,222 +1,620 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DataTable } from "@/components/ui/data-table";
+import { DatePicker } from "@/components/ui/datepicker";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  AcademicCapIcon,
+  BuildingLibraryIcon,
+  RectangleGroupIcon,
+  StarIcon,
+  BookOpenIcon,
+  UserGroupIcon,
+  CalendarDaysIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  PlusIcon,
+  ArrowUpTrayIcon,
+  Cog6ToothIcon,
+} from "@heroicons/react/24/outline";
+import type { ColumnDef } from "@tanstack/react-table";
+import { toast } from "sonner";
 
-/* ─── Types ─────────────────────────────────────────────── */
-interface Programme { id: number; code: string; name: string; fullName: string; batches: BatchFull[]; Term?: Term[]; }
-interface BatchFull { id: number; name: string; programmeId: number; startYear: number; endYear: number; isActive: boolean; activeTerm?: Term | null; activeTermId?: number | null; divisions: Division[]; _count: { students: number }; programme?: Programme; }
-interface Batch { id: number; name: string; programmeId: number; startYear: number; endYear: number; activeTermId?: number | null; programme?: Programme; }
-interface Term { id: number; programmeId: number; number: number; name: string; startDate: string | null; isActive: boolean; programme?: Programme; }
-interface Division { id: number; name: string; type: string; batchId: number | null; specialisationId: number | null; batch?: Batch & { programme?: Programme } | null; specialisation?: { name: string; code: string } | null; _count?: { coreStudents: number; specStudents: number }; }
-interface Specialisation { id: number; name: string; code: string; divisions?: Division[]; _count?: { students: number }; }
-interface Student { id: number; name: string; email: string; rollNumber: string | null; batch?: BatchFull & { programme?: Programme }; coreDivision?: Division | null; specialisation?: Specialisation | null; specDivision?: Division | null; }
-interface Course { id: number; code: string; name: string; totalSessions: number; credits: number; type: string; termId: number | null; specialisationId: number | null; term?: Term | null; specialisation?: Specialisation | null; }
-interface Faculty { id: number; name: string; email: string; teachingArea: string | null; _count?: { timetable: number; courses: number }; }
-interface TimetableEntry { id: number; divisionId: number; courseId: number; facultyId: number | null; date: string; slotNumber: number; startTime: string; endTime: string; isConducted: boolean; sessionNumber: number | null; division: Division; course: Course; faculty?: Faculty | null; }
-type Tab = "students" | "programmes" | "divisions" | "specialisations" | "courses" | "faculty" | "timetable";
+interface Programme {
+  id: string;
+  code: string;
+  name: string;
+  fullName: string;
+  batches: BatchFull[];
+}
+interface BatchFull {
+  id: string;
+  name: string;
+  programmeId: string;
+  startYear: number;
+  endYear: number;
+  isActive: boolean;
+  activeTerm?: Term | null;
+  activeTermId?: string | null;
+  divisions: Division[];
+  terms: Term[];
+  groups: Group[];
+  _count: { students: number };
+  programme?: Programme;
+}
+interface Batch {
+  id: string;
+  name: string;
+  programmeId: string;
+  startYear: number;
+  endYear: number;
+  activeTermId?: string | null;
+  programme?: Programme;
+}
+interface Term {
+  id: string;
+  batchId: string;
+  number: number;
+  name: string;
+  isActive: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+  batch?: Batch;
+}
+interface TermRoomAssignment {
+  termId: string;
+  roomId: string;
+  term?: { id: string; name: string; number: number; batchId: string };
+  room?: { id: string; name: string };
+}
+interface Division {
+  id: string;
+  name: string;
+  batchId: string;
+  erpClassCode?: string | null;
+  defaultRoomId?: string | null;
+  defaultRoom?: { id: string; name: string } | null;
+  termRoomAssignments?: TermRoomAssignment[];
+  batch?: Batch | null;
+  _count?: { students: number };
+}
+interface Group {
+  id: string;
+  name: string;
+  batchId: string;
+  type: string;
+  specialisationId?: string | null;
+  erpGroupCode?: string | null;
+  defaultRoomId?: string | null;
+  defaultRoom?: { id: string; name: string } | null;
+  termRoomAssignments?: TermRoomAssignment[];
+  batch?: Batch | null;
+  allowedBatches?: Batch[];
+  allowedBatchIds?: string[];
+  specialisation?: { name: string; code: string } | null;
+  _count?: { members: number };
+}
+interface Specialisation {
+  id: string;
+  name: string;
+  code: string;
+  groups?: Group[];
+  _count?: { students: number };
+}
+interface Student {
+  id: string;
+  rollNumber: string | null;
+  user: { name: string; email: string };
+  batch?: BatchFull & { programme?: Programme };
+  division?: Division | null;
+  specialisation?: Specialisation | null;
+  groups?: {
+    groupId: string;
+    group: { id: string; name: string; type: string };
+  }[];
+}
+interface Course {
+  id: string;
+  code: string;
+  name: string;
+  totalSessions: number;
+  credits: number;
+  type: string;
+  specialisationId: string | null;
+  specialisation?: Specialisation | null;
+  courseTerms?: { term: Term & { batch?: Batch } }[];
+  courseDivisions?: { division: Division }[];
+  courseGroups?: { group: Group }[];
+  facultyCourses?: { faculty: Faculty }[];
+}
+interface Faculty {
+  id: string;
+  name: string;
+  email: string;
+  teachingArea: string | null;
+  _count?: { timetable: number; courses: number };
+}
 
 const FIXED_SLOTS = [
-  { slot: 1, start: "08:15", end: "09:00",  label: "8:15–9:00"   },
-  { slot: 2, start: "09:00", end: "10:10",  label: "9:00–10:10"  },
-  { slot: 3, start: "10:40", end: "11:50",  label: "10:40–11:50" },
-  { slot: 4, start: "12:10", end: "13:20",  label: "12:10–1:20"  },
-  { slot: 5, start: "14:30", end: "15:40",  label: "2:30–3:40"   },
-  { slot: 6, start: "16:00", end: "17:10",  label: "4:00–5:10"   },
-  { slot: 7, start: "17:30", end: "18:40",  label: "5:30–6:40"   },
-  { slot: 8, start: "19:00", end: "20:10",  label: "7:00–8:10"   },
+  { slot: 1, start: "08:15", end: "09:00", label: "8:15–9:00" },
+  { slot: 2, start: "09:00", end: "10:10", label: "9:00–10:10" },
+  { slot: 3, start: "10:40", end: "11:50", label: "10:40–11:50" },
+  { slot: 4, start: "12:10", end: "13:20", label: "12:10–1:20" },
+  { slot: 5, start: "14:30", end: "15:40", label: "2:30–3:40" },
+  { slot: 6, start: "16:00", end: "17:10", label: "4:00–5:10" },
+  { slot: 7, start: "17:30", end: "18:40", label: "5:30–6:40" },
+  { slot: 8, start: "19:00", end: "20:10", label: "7:00–8:10" },
 ];
 
-/* ─── Shared style tokens ────────────────────────────────── */
-const C = {
-  card:    "var(--color-bg-card)",
-  sec:     "var(--color-bg-secondary)",
-  border:  "var(--color-border)",
-  text:    "var(--color-text-primary)",
-  muted:   "var(--color-text-muted)",
-  sub:     "var(--color-text-secondary)",
-  accent:  "var(--color-accent)",
-  accentS: "var(--color-accent-sec)",
-  accentG: "var(--color-accent-glow)",
-  success: "var(--color-success)",
-  warning: "var(--color-warning)",
-  danger:  "var(--color-danger)",
-};
-
-const card    = { background: C.card,  border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, marginBottom: 20 };
-const inputCls = "tw-input";
-const qBtn    = { padding: "6px 14px", background: C.sec, border: `1px solid ${C.border}`, borderRadius: 6, color: C.sub, fontSize: 12, fontFamily: "inherit", cursor: "pointer" } as React.CSSProperties;
-const pBtn    = { background: "linear-gradient(135deg,#6366f1,#7c3aed)", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 600, padding: "10px 24px", cursor: "pointer", fontFamily: "inherit" } as React.CSSProperties;
-
-function Label({ text }: { text: string }) {
-  return <label className="block text-xs font-medium uppercase tracking-wide mb-1.5" style={{ color: C.sub }}>{text}</label>;
+function FieldLabel({ text }: { text: string }) {
+  return (
+    <label className="block text-xs font-medium uppercase tracking-wide mb-1.5 text-[var(--color-text-secondary)]">
+      {text}
+    </label>
+  );
 }
 function Err({ msg }: { msg: string }) {
-  return msg ? <p className="text-sm mb-3" style={{ color: C.danger }}>{msg}</p> : null;
-}
-function Pagination({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
-  if (total <= 1) return null;
-  return (
-    <div className="flex gap-2 justify-center mt-4">
-      <button style={qBtn} disabled={page === 1} onClick={() => onChange(page - 1)}>Prev</button>
-      <span className="self-center text-sm" style={{ color: C.sub }}>Page {page} of {total}</span>
-      <button style={qBtn} disabled={page === total} onClick={() => onChange(page + 1)}>Next</button>
-    </div>
-  );
+  return msg ? <p className="text-sm mb-3 text-red-500">{msg}</p> : null;
 }
 
 /* ─── Main Page ──────────────────────────────────────────── */
 export default function ManagePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("students");
-
-  const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: "students",       label: "Students",      icon: "🎓" },
-    { key: "programmes",     label: "Programmes",    icon: "🏫" },
-    { key: "divisions",      label: "Divisions",     icon: "🏷️"  },
-    { key: "specialisations",label: "Specs",         icon: "⭐" },
-    { key: "courses",        label: "Courses",       icon: "📘" },
-    { key: "faculty",        label: "Faculty",       icon: "👨‍🏫" },
-    { key: "timetable",      label: "Timetable",     icon: "📅" },
+  const tabs = [
+    { value: "students", label: "Students", Icon: AcademicCapIcon },
+    { value: "programmes", label: "Programmes", Icon: BuildingLibraryIcon },
+    { value: "divisions", label: "Divisions", Icon: RectangleGroupIcon },
+    { value: "groups", label: "Groups", Icon: UserGroupIcon },
+    { value: "specialisations", label: "Specs", Icon: StarIcon },
+    { value: "courses", label: "Courses", Icon: BookOpenIcon },
+    { value: "faculty", label: "Faculty", Icon: UserGroupIcon },
+    { value: "timetable", label: "Timetable", Icon: CalendarDaysIcon },
+    { value: "erp-settings", label: "ERP Settings", Icon: Cog6ToothIcon },
   ];
 
   return (
     <div className="relative z-[1]">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold" style={{ color: C.text }}>Manage</h1>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-0.5 mb-6 border-b overflow-x-auto" style={{ borderColor: C.border }}>
-        {tabs.map(tab => {
-          const active = activeTab === tab.key;
-          return (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className="px-4 py-2.5 text-sm font-semibold whitespace-nowrap cursor-pointer border-0 transition-colors"
-              style={{
-                background: active ? C.accentG : "transparent",
-                borderBottom: active ? `2px solid ${C.accent}` : "2px solid transparent",
-                color: active ? C.accentS : C.sub,
-                fontFamily: "inherit",
-              }}>
-              {tab.icon} {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeTab === "students"        && <StudentsTab />}
-      {activeTab === "programmes"      && <ProgrammesTab />}
-      {activeTab === "divisions"       && <DivisionsTab />}
-      {activeTab === "specialisations" && <SpecialisationsTab />}
-      {activeTab === "courses"         && <CoursesTab />}
-      {activeTab === "faculty"         && <FacultyTab />}
-      {activeTab === "timetable"       && <TimetableTab />}
+      <h1 className="text-3xl font-bold mb-6 text-[var(--color-text-primary)]">
+        Manage
+      </h1>
+      <Tabs defaultValue="students" className="w-full">
+        <TabsList className="flex gap-0.5 mb-6 h-auto bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl p-1 overflow-x-auto">
+          {tabs.map(({ value, label, Icon }) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[var(--color-text-secondary)] rounded-lg data-[active]:bg-[#531f75] data-[active]:text-white data-[active]:shadow-sm transition-all whitespace-nowrap"
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent
+          value="students"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <StudentsTab />
+        </TabsContent>
+        <TabsContent
+          value="programmes"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <ProgrammesTab />
+        </TabsContent>
+        <TabsContent
+          value="divisions"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <DivisionsTab />
+        </TabsContent>
+        <TabsContent
+          value="groups"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <GroupsTab />
+        </TabsContent>
+        <TabsContent
+          value="specialisations"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <SpecialisationsTab />
+        </TabsContent>
+        <TabsContent
+          value="courses"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <CoursesTab />
+        </TabsContent>
+        <TabsContent
+          value="faculty"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <FacultyTab />
+        </TabsContent>
+        <TabsContent
+          value="timetable"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <TimetableTab />
+        </TabsContent>
+        <TabsContent
+          value="erp-settings"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <ErpSettingsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
 /* ─── Students Tab ─────────────────────────────────────── */
 function StudentsTab() {
-  const [students, setStudents]           = useState<Student[]>([]);
-  const [batches, setBatches]             = useState<Batch[]>([]);
-  const [divisions, setDivisions]         = useState<Division[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
   const [specialisations, setSpecialisations] = useState<Specialisation[]>([]);
-  const [showForm, setShowForm]           = useState(false);
-  const [editingId, setEditingId]         = useState<number | null>(null);
-  const [error, setError]                 = useState("");
-  const empty = { name: "", email: "", rollNumber: "", batchId: "", coreDivisionId: "", specialisationId: "", specDivisionId: "" };
-  const [form, setForm]                   = useState(empty);
-  const [search, setSearch]               = useState("");
-  const [page, setPage]                   = useState(1);
-  const PER = 20;
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const empty = {
+    name: "",
+    email: "",
+    rollNumber: "",
+    batchId: "",
+    divisionId: "",
+    specialisationId: "",
+    groupIds: [] as string[],
+  };
+  const [form, setForm] = useState(empty);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = useCallback(async () => {
     const [sR, bR, dR, spR] = await Promise.all([
-      fetch("/api/admin/students"), fetch("/api/admin/batches"),
-      fetch("/api/admin/divisions"), fetch("/api/admin/specialisations"),
+      fetch("/api/admin/students"),
+      fetch("/api/admin/batches"),
+      fetch("/api/admin/divisions"),
+      fetch("/api/admin/specialisations"),
     ]);
-    setStudents(await sR.json()); setBatches(await bR.json());
-    setDivisions(await dR.json()); setSpecialisations(await spR.json());
+    setStudents(await sR.json());
+    setBatches(await bR.json());
+    setDivisions(await dR.json());
+    setSpecialisations(await spR.json());
   }, []);
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
-  const selBatch    = batches.find(b => b.id === parseInt(form.batchId));
-  const coreDivs    = divisions.filter(d => d.type === "core" && (!form.batchId || d.batchId === parseInt(form.batchId)));
-  const specDivs    = divisions.filter(d => d.type === "specialisation" && (!form.specialisationId || d.specialisationId === parseInt(form.specialisationId)));
+  const selBatch = batches.find((b) => b.id === form.batchId);
+  const coreDivs = divisions.filter(
+    (d) => !form.batchId || d.batchId === form.batchId,
+  );
 
   const handleSave = async () => {
     setError("");
-    const p = { ...form, batchId: form.batchId ? parseInt(form.batchId) : null, coreDivisionId: form.coreDivisionId ? parseInt(form.coreDivisionId) : null, specialisationId: form.specialisationId ? parseInt(form.specialisationId) : null, specDivisionId: form.specDivisionId ? parseInt(form.specDivisionId) : null };
+    const p = {
+      name: form.name,
+      email: form.email,
+      rollNumber: form.rollNumber,
+      batchId: form.batchId || null,
+      divisionId: form.divisionId || null,
+      specialisationId: form.specialisationId || null,
+      groupIds: form.groupIds,
+    };
     const res = editingId
-      ? await fetch("/api/admin/students", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingId, ...p }) })
-      : await fetch("/api/admin/students", { method: "POST",  headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
-    if (res.ok) { setForm(empty); setShowForm(false); setEditingId(null); fetchAll(); }
-    else { setError((await res.json()).error || "Failed"); }
+      ? await fetch("/api/admin/students", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingId,
+            name: form.name,
+            email: form.email,
+            rollNumber: form.rollNumber,
+            batchId: form.batchId || null,
+            divisionId: form.divisionId || null,
+            specialisationId: form.specialisationId || null,
+          }),
+        })
+      : await fetch("/api/admin/students", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(p),
+        });
+    if (res.ok) {
+      setForm(empty);
+      setShowForm(false);
+      setEditingId(null);
+      fetchAll();
+    } else {
+      setError((await res.json()).error || "Failed");
+    }
   };
   const startEdit = (s: Student) => {
-    setEditingId(s.id); setError("");
-    setForm({ name: s.name, email: s.email, rollNumber: s.rollNumber || "", batchId: s.batch?.id?.toString() || "", coreDivisionId: s.coreDivision?.id?.toString() || "", specialisationId: s.specialisation?.id?.toString() || "", specDivisionId: s.specDivision?.id?.toString() || "" });
+    setEditingId(s.id);
+    setError("");
+    setForm({
+      name: s.user.name,
+      email: s.user.email,
+      rollNumber: s.rollNumber || "",
+      batchId: s.batch?.id || "",
+      divisionId: s.division?.id || "",
+      specialisationId: s.specialisation?.id || "",
+      groupIds: s.groups?.map((g) => g.groupId) || [],
+    });
     setShowForm(true);
   };
 
-  const filtered   = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.rollNumber || "").toLowerCase().includes(search.toLowerCase()) || (s.batch?.name || "").toLowerCase().includes(search.toLowerCase()));
-  const totalPages = Math.ceil(filtered.length / PER);
-  const paged      = filtered.slice((page - 1) * PER, page * PER);
+  const columns: ColumnDef<Student>[] = [
+    {
+      accessorKey: "rollNumber",
+      header: "Roll",
+      size: 120,
+      cell: ({ row }) => (
+        <span className="font-medium text-[var(--color-text-primary)]">
+          {row.original.rollNumber || "—"}
+        </span>
+      ),
+    },
+    {
+      accessorFn: (r) => r.user.name,
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-primary)]">
+          {row.original.user.name}
+        </span>
+      ),
+    },
+    {
+      accessorFn: (r) => r.batch?.name,
+      header: "Batch",
+      size: 130,
+      cell: ({ row }) => (
+        <span className="text-xs text-[var(--color-text-secondary)]">
+          {row.original.batch?.name || "—"}
+        </span>
+      ),
+    },
+    {
+      accessorFn: (r) => r.division?.name,
+      header: "Div",
+      size: 80,
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original.division?.name || "—"}
+        </span>
+      ),
+    },
+    {
+      accessorFn: (r) => r.specialisation?.name,
+      header: "Spec",
+      size: 120,
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original.specialisation?.name || "—"}
+        </span>
+      ),
+    },
+    {
+      accessorFn: (r) => r.groups?.map((g) => g.group.name).join(", "),
+      header: "Groups",
+      size: 120,
+      cell: ({ row }) => (
+        <span className="text-xs text-[var(--color-text-secondary)]">
+          {row.original.groups?.map((g) => g.group.name).join(", ") || "—"}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      size: 60,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-[var(--color-text-muted)] hover:text-[#531f75]"
+          onClick={() => startEdit(row.original)}
+        >
+          <PencilSquareIcon className="w-4 h-4" />
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold" style={{ color: C.text }}>🎓 Students ({students.length})</h2>
-        <div className="flex gap-2 items-center">
-          <input type="text" className={inputCls} placeholder="Search by name, roll, or batch..." value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ padding: "6px 12px", width: 280 }} />
-          <button style={qBtn} onClick={() => { setEditingId(null); setForm(empty); setShowForm(!showForm); }}>+ Add</button>
-          <button style={qBtn} onClick={() => fileRef.current?.click()}>📤 Bulk</button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
-            onChange={async e => { const f = e.target.files?.[0]; if (!f) return; const fd = new FormData(); fd.append("file", f); await fetch("/api/admin/students/upload", { method: "POST", body: fd }); fetchAll(); e.target.value = ""; }} />
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+          Students ({students.length})
+        </h2>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileRef.current?.click()}
+            className="gap-1.5"
+          >
+            <ArrowUpTrayIcon className="w-4 h-4" /> Bulk Import
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingId(null);
+              setForm(empty);
+              setShowForm(!showForm);
+            }}
+            className="gap-1.5"
+          >
+            <PlusIcon className="w-4 h-4" /> Add Student
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const fd = new FormData();
+              fd.append("file", f);
+              await fetch("/api/admin/students/upload", {
+                method: "POST",
+                body: fd,
+              });
+              fetchAll();
+              e.target.value = "";
+            }}
+          />
         </div>
       </div>
 
       {showForm && (
-        <div style={{ ...card, borderColor: editingId ? C.accent : C.border }}>
-          <h3 className="text-sm font-medium mb-3" style={{ color: C.sub }}>{editingId ? "✏️ Edit Student" : "➕ Add Student"}</h3>
-          <Err msg={error} />
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <div><Label text="Name" /><input className={inputCls} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-            <div><Label text="Email" /><input className={inputCls} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
-            <div><Label text={`Roll (${selBatch?.programme?.code || "CODE"}-YY-NNN)`} />
-              <input className={inputCls} placeholder={`${selBatch?.programme?.code || "PGP"}-25-001`} value={form.rollNumber} onChange={e => setForm({ ...form, rollNumber: e.target.value })} /></div>
-            <div><Label text="Batch" /><select className={inputCls} value={form.batchId} onChange={e => setForm({ ...form, batchId: e.target.value, coreDivisionId: "" })}><option value="">Select</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
-            <div><Label text="Core Division" /><select className={inputCls} value={form.coreDivisionId} onChange={e => setForm({ ...form, coreDivisionId: e.target.value })}><option value="">Select</option>{coreDivs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-            <div><Label text="Specialisation" /><select className={inputCls} value={form.specialisationId} onChange={e => setForm({ ...form, specialisationId: e.target.value, specDivisionId: "" })}><option value="">Select</option>{specialisations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-            <div><Label text="Spec Division" /><select className={inputCls} value={form.specDivisionId} onChange={e => setForm({ ...form, specDivisionId: e.target.value })}><option value="">Select</option>{specDivs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-          </div>
-          <div className="flex gap-2">
-            <button style={{ ...pBtn, maxWidth: 160 }} onClick={handleSave}>{editingId ? "Save" : "Add"}</button>
-            <button style={qBtn} onClick={() => { setEditingId(null); setForm(empty); setShowForm(false); setError(""); }}>Cancel</button>
-          </div>
-        </div>
+        <Card
+          className={`mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)] ${editingId ? "border-[#531f75]" : ""}`}
+        >
+          <CardContent className="p-4">
+            <h3 className="text-sm font-semibold mb-3 text-[var(--color-text-secondary)]">
+              {editingId ? "Edit Student" : "Add Student"}
+            </h3>
+            <Err msg={error} />
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <FieldLabel text="Name" />
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <FieldLabel text="Email" />
+                <Input
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <FieldLabel
+                  text={`Roll (${selBatch?.programme?.code || "CODE"}-YY-NNN)`}
+                />
+                <Input
+                  placeholder={`${selBatch?.programme?.code || "PGP"}-25-001`}
+                  value={form.rollNumber}
+                  onChange={(e) =>
+                    setForm({ ...form, rollNumber: e.target.value })
+                  }
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <FieldLabel text="Batch" />
+                <Select
+                  value={form.batchId}
+                  onValueChange={(v: string) =>
+                    setForm({ ...form, batchId: v, divisionId: "" })
+                  }
+                >
+                  <SelectTrigger className="bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                    <SelectValue placeholder="Select batch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {batches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <FieldLabel text="Division" />
+                <Select
+                  value={form.divisionId}
+                  onValueChange={(v: string) =>
+                    setForm({ ...form, divisionId: v })
+                  }
+                >
+                  <SelectTrigger className="bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                    <SelectValue placeholder="Select division" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {coreDivs.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <FieldLabel text="Specialisation" />
+                <Select
+                  value={form.specialisationId}
+                  onValueChange={(v: string) =>
+                    setForm({ ...form, specialisationId: v })
+                  }
+                >
+                  <SelectTrigger className="bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                    <SelectValue placeholder="Select spec" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {specialisations.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSave} className="">
+                {editingId ? "Save Changes" : "Add Student"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingId(null);
+                  setForm(empty);
+                  setShowForm(false);
+                  setError("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="rounded-2xl border overflow-hidden" style={{ background: C.card, borderColor: C.border }}>
-        <table className="tw-table">
-          <thead><tr><th>Roll</th><th>Name</th><th>Batch</th><th>Div</th><th>Spec</th><th>S.Div</th><th></th></tr></thead>
-          <tbody>
-            {paged.map(s => (
-              <tr key={s.id}>
-                <td className="font-medium" style={{ color: C.text }}>{s.rollNumber}</td>
-                <td style={{ color: C.text }}>{s.name}</td>
-                <td className="text-xs" style={{ color: C.sub }}>{s.batch?.name || "—"}</td>
-                <td style={{ color: C.sub }}>{s.coreDivision?.name || "—"}</td>
-                <td style={{ color: C.sub }}>{s.specialisation?.name || "—"}</td>
-                <td style={{ color: C.sub }}>{s.specDivision?.name || "—"}</td>
-                <td><button style={{ ...qBtn, padding: "3px 10px", fontSize: 11 }} onClick={() => startEdit(s)}>✏️</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Pagination page={page} total={totalPages} onChange={setPage} />
+      <DataTable
+        columns={columns}
+        data={students}
+        searchPlaceholder="Search by name, roll, or batch..."
+      />
     </div>
   );
 }
@@ -224,454 +622,2559 @@ function StudentsTab() {
 /* ─── Programmes Tab ──────────────────────────────────────── */
 function ProgrammesTab() {
   const [programmes, setProgrammes] = useState<Programme[]>([]);
-  const [showForm, setShowForm]     = useState(false);
-  const [form, setForm]             = useState({ code: "", name: "", fullName: "" });
-  const [batchForm, setBatchForm]   = useState({ programmeId: "", name: "", startYear: "", endYear: "" });
-  const [termForm, setTermForm]     = useState({ programmeId: "", number: "", startDate: "" });
-  const fetch_ = useCallback(async () => { setProgrammes(await (await fetch("/api/admin/programmes")).json()); }, []);
-  useEffect(() => { fetch_(); }, [fetch_]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ code: "", name: "", fullName: "" });
+  const [batchForm, setBatchForm] = useState({
+    programmeId: "",
+    name: "",
+    startYear: "",
+    endYear: "",
+  });
+  const [termForm, setTermForm] = useState({
+    batchId: "",
+    number: "",
+    startDate: "",
+    endDate: "",
+  });
+  const [editingProgrammeId, setEditingProgrammeId] = useState<string | null>(
+    null,
+  );
+  const [editProgrammeForm, setEditProgrammeForm] = useState({
+    code: "",
+    name: "",
+    fullName: "",
+  });
+  const [termDrafts, setTermDrafts] = useState<
+    Record<string, { startDate: string; endDate: string }>
+  >({});
+  const [error, setError] = useState("");
 
-  const addProg  = async () => { await fetch("/api/admin/programmes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }); setForm({ code: "", name: "", fullName: "" }); setShowForm(false); fetch_(); };
-  const addBatch = async () => { await fetch("/api/admin/batches",   { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...batchForm, programmeId: parseInt(batchForm.programmeId), startYear: parseInt(batchForm.startYear), endYear: parseInt(batchForm.endYear) }) }); setBatchForm({ programmeId: "", name: "", startYear: "", endYear: "" }); fetch_(); };
-  const addTerm  = async () => { await fetch("/api/admin/terms",     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ programmeId: parseInt(termForm.programmeId), number: parseInt(termForm.number), startDate: termForm.startDate || null }) }); setTermForm({ programmeId: "", number: "", startDate: "" }); fetch_(); };
+  const fetch_ = useCallback(async () => {
+    setProgrammes(await (await fetch("/api/admin/programmes")).json());
+  }, []);
+  useEffect(() => {
+    fetch_();
+  }, [fetch_]);
+
+  const beginProgrammeEdit = (programme: Programme) => {
+    setEditingProgrammeId(programme.id);
+    setEditProgrammeForm({
+      code: programme.code,
+      name: programme.name,
+      fullName: programme.fullName,
+    });
+  };
+
+  const saveProgramme = async () => {
+    if (!editingProgrammeId) return;
+    setError("");
+    const res = await fetch("/api/admin/programmes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editingProgrammeId, ...editProgrammeForm }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update programme");
+      return;
+    }
+    setEditingProgrammeId(null);
+    fetch_();
+  };
+
+  const toggleBatchStatus = async (batch: BatchFull) => {
+    setError("");
+    const res = await fetch("/api/admin/batches", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: batch.id, isActive: !batch.isActive }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update batch status");
+      return;
+    }
+    fetch_();
+  };
+
+  const getTermDraft = (term: Term) =>
+    termDrafts[term.id] ?? {
+      startDate: term.startDate ?? "",
+      endDate: term.endDate ?? "",
+    };
+
+  const setTermDraftField = (
+    term: Term,
+    field: "startDate" | "endDate",
+    value: string,
+  ) => {
+    setTermDrafts((prev) => ({
+      ...prev,
+      [term.id]: {
+        ...getTermDraft(term),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveTermDates = async (term: Term) => {
+    const draft = getTermDraft(term);
+    setError("");
+    const res = await fetch("/api/admin/terms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: term.id,
+        startDate: draft.startDate || null,
+        endDate: draft.endDate || null,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update term dates");
+      toast.error(data.error ?? `Could not save dates for ${term.name}`);
+      return;
+    }
+    toast.success(`Saved dates for ${term.name}`);
+    fetch_();
+  };
+
+  const setActiveTerm = async (term: Term, isActive: boolean) => {
+    setError("");
+    const res = await fetch("/api/admin/terms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: term.id, isActive }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not update active term");
+      toast.error(
+        data.error ?? `Could not ${isActive ? "set" : "clear"} active term`,
+      );
+      return;
+    }
+    toast.success(
+      isActive
+        ? `${term.name} is now the active term`
+        : `Active term cleared for this batch`,
+    );
+    fetch_();
+  };
+
+  const addProg = async () => {
+    setError("");
+    const res = await fetch("/api/admin/programmes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not create programme");
+      return;
+    }
+    setForm({ code: "", name: "", fullName: "" });
+    setShowForm(false);
+    fetch_();
+  };
+  const addBatch = async () => {
+    setError("");
+    const res = await fetch("/api/admin/batches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...batchForm,
+        startYear: parseInt(batchForm.startYear),
+        endYear: parseInt(batchForm.endYear),
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not create batch");
+      return;
+    }
+    setBatchForm({ programmeId: "", name: "", startYear: "", endYear: "" });
+    fetch_();
+  };
+  const addTerm = async () => {
+    setError("");
+    const res = await fetch("/api/admin/terms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batchId: termForm.batchId,
+        number: parseInt(termForm.number),
+        startDate: termForm.startDate || null,
+        endDate: termForm.endDate || null,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Could not create term");
+      return;
+    }
+    setTermForm({ batchId: "", number: "", startDate: "", endDate: "" });
+    fetch_();
+  };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold" style={{ color: C.text }}>🏫 Programmes & Batches</h2>
-        <button style={qBtn} onClick={() => setShowForm(!showForm)}>+ Add Programme</button>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+          Programmes & Batches
+        </h2>
+        <Button
+          size="sm"
+          onClick={() => setShowForm(!showForm)}
+          className="gap-1.5"
+        >
+          <PlusIcon className="w-4 h-4" /> Add Programme
+        </Button>
       </div>
-
+      <Err msg={error} />
       {showForm && (
-        <div style={card}>
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <div><Label text="Code" /><input className={inputCls} placeholder="PGP" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} /></div>
-            <div><Label text="Name" /><input className={inputCls} placeholder="PGDM" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-            <div><Label text="Full Name" /><input className={inputCls} value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} /></div>
-          </div>
-          <button style={{ ...pBtn, maxWidth: 160 }} onClick={addProg}>Create</button>
-        </div>
+        <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <FieldLabel text="Code" />
+                <Input
+                  placeholder="PGP"
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <FieldLabel text="Name" />
+                <Input
+                  placeholder="PGDM"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <FieldLabel text="Full Name" />
+                <Input
+                  value={form.fullName}
+                  onChange={(e) =>
+                    setForm({ ...form, fullName: e.target.value })
+                  }
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+            </div>
+            <Button onClick={addProg} className="">
+              Create Programme
+            </Button>
+          </CardContent>
+        </Card>
       )}
-
-      {programmes.map(p => (
-        <div key={p.id} style={card}>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="text-lg font-semibold" style={{ color: C.text }}>{p.name} <span className="text-sm" style={{ color: C.accentS }}>({p.code})</span></div>
-              <div className="text-sm" style={{ color: C.muted }}>{p.fullName}</div>
+      {programmes.map((p) => (
+        <Card
+          key={p.id}
+          className="mb-4 bg-[var(--color-bg-card)] border-[var(--color-border)]"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                {editingProgrammeId === p.id ? (
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Input
+                      value={editProgrammeForm.code}
+                      onChange={(e) =>
+                        setEditProgrammeForm((prev) => ({
+                          ...prev,
+                          code: e.target.value,
+                        }))
+                      }
+                      className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                    />
+                    <Input
+                      value={editProgrammeForm.name}
+                      onChange={(e) =>
+                        setEditProgrammeForm((prev) => ({
+                          ...prev,
+                          name: e.target.value,
+                        }))
+                      }
+                      className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                    />
+                    <Input
+                      value={editProgrammeForm.fullName}
+                      onChange={(e) =>
+                        setEditProgrammeForm((prev) => ({
+                          ...prev,
+                          fullName: e.target.value,
+                        }))
+                      }
+                      className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-lg font-semibold text-[var(--color-text-primary)]">
+                      {p.name}{" "}
+                      <span className="text-sm text-[#8b5cf6]">({p.code})</span>
+                    </div>
+                    <div className="text-sm text-[var(--color-text-muted)]">
+                      {p.fullName}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {editingProgrammeId === p.id ? (
+                  <>
+                    <Button size="sm" onClick={saveProgramme}>
+                      Save Programme
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingProgrammeId(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => beginProgrammeEdit(p)}
+                  >
+                    <PencilSquareIcon className="w-4 h-4 mr-1" /> Edit
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-          {p.Term && p.Term.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {p.Term.map(t => <span key={t.id} className="badge-success">T{t.number}</span>)}
-            </div>
-          )}
-          {p.batches.map(b => (
-            <div key={b.id} className="pt-3 mt-3 border-t" style={{ borderColor: C.border }}>
-              <div className="font-semibold text-sm" style={{ color: C.text }}>{b.name}</div>
-              <div className="text-xs mt-1" style={{ color: C.muted }}>{b._count.students} students · Divs: {b.divisions.map(d => d.name).join(", ") || "—"}</div>
-              {b.activeTermId && <div className="mt-2"><span className="badge-success">Active: T{p.Term?.find(t => t.id === b.activeTermId)?.number}</span></div>}
-            </div>
-          ))}
-        </div>
+            {p.batches.map((b) => (
+              <div
+                key={b.id}
+                className="pt-3 mt-3 border-t border-[var(--color-border)]"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-sm text-[var(--color-text-primary)]">
+                      {b.name}
+                    </div>
+                    <div className="text-xs mt-1 text-[var(--color-text-muted)]">
+                      {b._count.students} students · Divs:{" "}
+                      {b.divisions.map((d) => d.name).join(", ") || "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={
+                        b.isActive
+                          ? "text-green-500 border-green-500/30 bg-green-500/10"
+                          : "text-slate-500 border-slate-500/30 bg-slate-500/10"
+                      }
+                    >
+                      {b.isActive ? "Open" : "Closed"}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleBatchStatus(b)}
+                    >
+                      {b.isActive ? "Close Batch" : "Reopen Batch"}
+                    </Button>
+                  </div>
+                </div>
+                {b.terms && b.terms.length > 0 && (
+                  <div className="mt-3 grid gap-2">
+                    {b.terms.map((t) => {
+                      const termIsActive =
+                        t.isActive || b.activeTermId === t.id;
+                      const termDraft = getTermDraft(t);
+                      return (
+                        <div
+                          key={t.id}
+                          className={`rounded-lg border p-3 ${
+                            termIsActive
+                              ? "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]"
+                              : "border-[var(--color-border)] bg-[var(--color-bg-secondary)]"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  termIsActive
+                                    ? "text-emerald-700 border-emerald-500/40 bg-emerald-500/20"
+                                    : "text-[var(--color-text-muted)]"
+                                }
+                              >
+                                T{t.number}
+                              </Badge>
+                              <span className="text-sm text-[var(--color-text-primary)]">
+                                {t.name}
+                              </span>
+                              {termIsActive && (
+                                <Badge className="text-[10px] bg-emerald-600 text-white border-emerald-700">
+                                  Active Term
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setActiveTerm(t, !termIsActive)}
+                              >
+                                {termIsActive ? "Clear Active" : "Set Active"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => saveTermDates(t)}
+                              >
+                                Save Dates
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <div>
+                              <FieldLabel text="Start Date" />
+                              <Input
+                                type="date"
+                                value={termDraft.startDate}
+                                onChange={(e) =>
+                                  setTermDraftField(
+                                    t,
+                                    "startDate",
+                                    e.target.value,
+                                  )
+                                }
+                                className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                              />
+                            </div>
+                            <div>
+                              <FieldLabel text="End Date" />
+                              <Input
+                                type="date"
+                                value={termDraft.endDate}
+                                onChange={(e) =>
+                                  setTermDraftField(
+                                    t,
+                                    "endDate",
+                                    e.target.value,
+                                  )
+                                }
+                                className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ))}
+      <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
+        <CardContent className="p-4">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-[var(--color-text-secondary)]">
+              Quick Add
+            </h3>
+            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+              Create a new batch or term without leaving this screen.
+            </p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Add Batch
+                </h4>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Pick a programme, define the year range, and give the batch a
+                  clear label.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <FieldLabel text="Programme" />
+                  <Select
+                    value={batchForm.programmeId}
+                    onValueChange={(v: string) =>
+                      setBatchForm({ ...batchForm, programmeId: v })
+                    }
+                  >
+                    <SelectTrigger className="bg-[var(--color-bg-card)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                      <SelectValue placeholder="Select programme" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programmes.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name} ({p.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel text="Start Year" />
+                  <Input
+                    placeholder="2026"
+                    value={batchForm.startYear}
+                    onChange={(e) =>
+                      setBatchForm({ ...batchForm, startYear: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel text="End Year" />
+                  <Input
+                    placeholder="2028"
+                    value={batchForm.endYear}
+                    onChange={(e) =>
+                      setBatchForm({ ...batchForm, endYear: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <FieldLabel text="Batch Name" />
+                  <Input
+                    placeholder="PGDM 2026-28"
+                    value={batchForm.name}
+                    onChange={(e) =>
+                      setBatchForm({ ...batchForm, name: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={addBatch}>Create Batch</Button>
+              </div>
+            </div>
 
-      <div style={card}>
-        <h3 className="text-sm font-semibold mb-4" style={{ color: C.sub }}>Quick Add</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <Label text="Add Batch" />
-            <div className="flex gap-2 flex-wrap">
-              <select className={inputCls} style={{ flex: 1 }} value={batchForm.programmeId} onChange={e => setBatchForm({ ...batchForm, programmeId: e.target.value })}><option value="">Programme</option>{programmes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-              <input className={inputCls} style={{ width: 80 }} placeholder="Start" value={batchForm.startYear} onChange={e => setBatchForm({ ...batchForm, startYear: e.target.value })} />
-              <input className={inputCls} style={{ width: 80 }} placeholder="End"   value={batchForm.endYear}   onChange={e => setBatchForm({ ...batchForm, endYear:   e.target.value })} />
-              <input className={inputCls} style={{ flex: 1 }}   placeholder="Name"  value={batchForm.name}      onChange={e => setBatchForm({ ...batchForm, name:      e.target.value })} />
-              <button style={qBtn} onClick={addBatch}>Add</button>
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Add Term
+                </h4>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Attach a numbered term to a batch and optionally define its
+                  scheduling window.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <FieldLabel text="Batch" />
+                  <Select
+                    value={termForm.batchId}
+                    onValueChange={(v: string) =>
+                      setTermForm({ ...termForm, batchId: v })
+                    }
+                  >
+                    <SelectTrigger className="bg-[var(--color-bg-card)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                      <SelectValue placeholder="Select batch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programmes.flatMap((p) =>
+                        p.batches.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {p.name} - {b.name}
+                          </SelectItem>
+                        )),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel text="Term Number" />
+                  <Input
+                    placeholder="1"
+                    value={termForm.number}
+                    onChange={(e) =>
+                      setTermForm({ ...termForm, number: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div className="flex items-end text-xs text-[var(--color-text-muted)] pb-2">
+                  Example: use 1, 2, 3 to match your academic sequence.
+                </div>
+                <div>
+                  <FieldLabel text="Start Date" />
+                  <Input
+                    type="date"
+                    value={termForm.startDate}
+                    onChange={(e) =>
+                      setTermForm({ ...termForm, startDate: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel text="End Date" />
+                  <Input
+                    type="date"
+                    value={termForm.endDate}
+                    onChange={(e) =>
+                      setTermForm({ ...termForm, endDate: e.target.value })
+                    }
+                    className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={addTerm}>Create Term</Button>
+              </div>
             </div>
           </div>
-          <div>
-            <Label text="Add Term" />
-            <div className="flex gap-2">
-              <select className={inputCls} style={{ flex: 1 }} value={termForm.programmeId} onChange={e => setTermForm({ ...termForm, programmeId: e.target.value })}><option value="">Programme</option>{programmes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-              <input className={inputCls} style={{ width: 60 }}  placeholder="#"    value={termForm.number}    onChange={e => setTermForm({ ...termForm, number:    e.target.value })} />
-              <input className={inputCls} style={{ width: 140 }} type="date"        value={termForm.startDate} onChange={e => setTermForm({ ...termForm, startDate: e.target.value })} />
-              <button style={qBtn} onClick={addTerm}>Add</button>
-            </div>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 /* ─── Divisions Tab ────────────────────────────────────── */
 function DivisionsTab() {
-  const [divisions, setDivisions]         = useState<Division[]>([]);
-  const [batches, setBatches]             = useState<Batch[]>([]);
-  const [specialisations, setSpecialisations] = useState<Specialisation[]>([]);
-  const [form, setForm]                   = useState({ name: "", type: "core", batchId: "", specialisationId: "" });
-  const [error, setError]                 = useState("");
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [rooms, setRooms] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedTermByDivision, setSelectedTermByDivision] = useState<
+    Record<string, string>
+  >({});
+  const [form, setForm] = useState({ name: "", batchId: "" });
+  const [error, setError] = useState("");
   const fetchAll = useCallback(async () => {
-    const [dR, bR, sR] = await Promise.all([fetch("/api/admin/divisions"), fetch("/api/admin/batches"), fetch("/api/admin/specialisations")]);
-    setDivisions(await dR.json()); setBatches(await bR.json()); setSpecialisations(await sR.json());
-  }, []);
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+    const [dR, bR, tR, rR] = await Promise.all([
+      fetch("/api/admin/divisions"),
+      fetch("/api/admin/batches"),
+      fetch("/api/admin/terms"),
+      fetch("/api/admin/rooms"),
+    ]);
+    const divisionsData: Division[] = await dR.json();
+    const batchesData: Batch[] = await bR.json();
+    const termsData: Term[] = await tR.json();
 
-  const selSpec   = specialisations.find(s => s.id === parseInt(form.specialisationId));
-  const preview   = form.type === "specialisation" && selSpec && form.name ? `${selSpec.code}-${form.name}` : form.name;
-  const addDiv    = async () => {
+    setDivisions(divisionsData);
+    setBatches(batchesData);
+    setTerms(termsData);
+
+    setSelectedTermByDivision((prev) => {
+      const next = { ...prev };
+      for (const division of divisionsData) {
+        if (next[division.id]) continue;
+        const batchTerms = termsData
+          .filter((term) => term.batchId === division.batchId)
+          .sort((a, b) => a.number - b.number);
+        if (!batchTerms.length) continue;
+        const assignedTermId =
+          division.termRoomAssignments &&
+          division.termRoomAssignments.length > 0
+            ? division.termRoomAssignments[0]?.termId
+            : undefined;
+        next[division.id] = assignedTermId ?? batchTerms[0].id;
+      }
+      return next;
+    });
+
+    const roomData = await rR.json();
+    setRooms(Array.isArray(roomData) ? roomData : []);
+  }, []);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const updateDefaultRoom = async (divId: string, roomId: string | null) => {
+    await fetch("/api/admin/divisions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: divId, defaultRoomId: roomId }),
+    });
+    fetchAll();
+  };
+
+  const updateTermRoom = async (
+    divId: string,
+    termId: string,
+    roomId: string | null,
+  ) => {
+    const division = divisions.find((d) => d.id === divId);
+    if (!division || !termId) return;
+    const baseAssignments = division.termRoomAssignments ?? [];
+    const nextAssignments = baseAssignments.filter(
+      (item) => item.termId !== termId,
+    );
+    if (roomId) {
+      nextAssignments.push({ termId, roomId });
+    }
+    await fetch("/api/admin/divisions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: divId,
+        termRoomAssignments: nextAssignments.map((item) => ({
+          termId: item.termId,
+          roomId: item.roomId,
+        })),
+      }),
+    });
+    fetchAll();
+  };
+
+  const getBatchTerms = (batchId: string) =>
+    terms
+      .filter((term) => term.batchId === batchId)
+      .sort((a, b) => a.number - b.number);
+
+  const getTermRoomValue = (division: Division, termId: string) =>
+    division.termRoomAssignments?.find((item) => item.termId === termId)
+      ?.roomId ?? "__none__";
+
+  const addDiv = async () => {
     setError("");
-    const res = await fetch("/api/admin/divisions", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: form.name, type: form.type, batchId: form.type === "core" && form.batchId ? parseInt(form.batchId) : null, specialisationId: form.type === "specialisation" && form.specialisationId ? parseInt(form.specialisationId) : null }) });
-    if (res.ok) { setForm({ name: "", type: "core", batchId: "", specialisationId: "" }); fetchAll(); }
-    else { setError((await res.json()).error); }
+    const res = await fetch("/api/admin/divisions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: form.name, batchId: form.batchId || null }),
+    });
+    if (res.ok) {
+      setForm({ name: "", batchId: "" });
+      fetchAll();
+    } else {
+      setError((await res.json()).error);
+    }
   };
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4" style={{ color: C.text }}>🏷️ Divisions</h2>
-      <div style={card}>
-        <Label text="Add Division" />
-        <Err msg={error} />
-        <div className="flex gap-2 items-end flex-wrap">
-          <select className={inputCls} style={{ width: 150 }} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option value="core">Core</option><option value="specialisation">Spec</option></select>
-          {form.type === "core"
-            ? <select className={inputCls} style={{ flex: 1 }} value={form.batchId} onChange={e => setForm({ ...form, batchId: e.target.value })}><option value="">Batch</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-            : <select className={inputCls} style={{ flex: 1 }} value={form.specialisationId} onChange={e => setForm({ ...form, specialisationId: e.target.value })}><option value="">Spec</option>{specialisations.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}</select>}
-          <input className={inputCls} style={{ width: 100 }} placeholder="e.g., A" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          {form.type === "specialisation" && preview && <span className="text-sm" style={{ color: C.accentS }}>→ {preview}</span>}
-          <button style={qBtn} onClick={addDiv}>Add</button>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        {[["core","Core","coreStudents"],["specialisation","Specialisation","specStudents"]].map(([type, title, countKey]) => (
-          <div key={type} style={card}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: C.sub }}>{title}</h3>
-            <table className="tw-table">
-              <thead><tr><th>Name</th><th>{type === "core" ? "Batch" : "Spec"}</th><th>Students</th></tr></thead>
-              <tbody>
-                {divisions.filter(d => d.type === type).map(d => (
-                  <tr key={d.id}>
-                    <td className="font-medium" style={{ color: C.text }}>{d.name}</td>
-                    <td style={{ color: C.sub }}>{type === "core" ? (d.batch?.name || "—") : (d.specialisation?.name || "—")}</td>
-                    <td style={{ color: C.sub }}>{(d._count as any)?.[countKey] || 0}</td>
-                  </tr>
+      <h2 className="text-lg font-semibold mb-4 text-[var(--color-text-primary)]">
+        Divisions
+      </h2>
+      <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
+        <CardContent className="p-4">
+          <FieldLabel text="Add Division" />
+          <Err msg={error} />
+          <div className="flex gap-2 items-end flex-wrap">
+            <Select
+              value={form.batchId}
+              onValueChange={(v: string) => setForm({ ...form, batchId: v })}
+            >
+              <SelectTrigger className="flex-1 bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                <SelectValue placeholder="Select Batch" />
+              </SelectTrigger>
+              <SelectContent>
+                {batches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
                 ))}
-              </tbody>
-            </table>
+              </SelectContent>
+            </Select>
+            <Input
+              style={{ width: 100 }}
+              placeholder="e.g., A"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+            />
+            <Button size="sm" onClick={addDiv} className="">
+              Add
+            </Button>
           </div>
-        ))}
-      </div>
+        </CardContent>
+      </Card>
+      <Card className="bg-[var(--color-bg-card)] border-[var(--color-border)]">
+        <CardContent className="p-4">
+          <h3 className="text-sm font-semibold mb-3 text-[var(--color-text-secondary)]">
+            All Divisions
+          </h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--color-border)]">
+                <th className="text-left py-2 text-xs uppercase text-[var(--color-text-muted)]">
+                  Name
+                </th>
+                <th className="text-left py-2 text-xs uppercase text-[var(--color-text-muted)]">
+                  Batch
+                </th>
+                <th className="text-left py-2 text-xs uppercase text-[var(--color-text-muted)]">
+                  Students
+                </th>
+                <th className="text-left py-2 text-xs uppercase text-[var(--color-text-muted)]">
+                  Default Room
+                </th>
+                <th className="text-left py-2 text-xs uppercase text-[var(--color-text-muted)]">
+                  Term Room
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {divisions.map((d) => (
+                <tr
+                  key={d.id}
+                  className="border-b border-[var(--color-border)] last:border-0"
+                >
+                  <td className="py-2 font-medium text-[var(--color-text-primary)]">
+                    {d.name}
+                  </td>
+                  <td className="py-2 text-[var(--color-text-secondary)]">
+                    {d.batch?.name || "—"}
+                  </td>
+                  <td className="py-2 text-[var(--color-text-secondary)]">
+                    {d._count?.students || 0}
+                  </td>
+                  <td className="py-2">
+                    <Select
+                      value={d.defaultRoomId || "__none__"}
+                      onValueChange={(v) =>
+                        updateDefaultRoom(d.id, v === "__none__" ? null : v)
+                      }
+                    >
+                      <SelectTrigger className="h-7 text-xs w-[140px] bg-[var(--color-bg-secondary)] border-[var(--color-border)]">
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {rooms.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2">
+                    {getBatchTerms(d.batchId).length === 0 ? (
+                      <span className="text-xs text-[var(--color-text-muted)]">
+                        No terms
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={
+                            selectedTermByDivision[d.id] ||
+                            getBatchTerms(d.batchId)[0].id
+                          }
+                          onValueChange={(termId) =>
+                            setSelectedTermByDivision((prev) => ({
+                              ...prev,
+                              [d.id]: termId,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs w-[120px] bg-[var(--color-bg-secondary)] border-[var(--color-border)]">
+                            <SelectValue placeholder="Term" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getBatchTerms(d.batchId).map((term) => (
+                              <SelectItem key={term.id} value={term.id}>
+                                {term.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={getTermRoomValue(
+                            d,
+                            selectedTermByDivision[d.id] ||
+                              getBatchTerms(d.batchId)[0].id,
+                          )}
+                          onValueChange={(v) =>
+                            updateTermRoom(
+                              d.id,
+                              selectedTermByDivision[d.id] ||
+                                getBatchTerms(d.batchId)[0].id,
+                              v === "__none__" ? null : v,
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs w-[140px] bg-[var(--color-bg-secondary)] border-[var(--color-border)]">
+                            <SelectValue placeholder="None" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {rooms.map((r) => (
+                              <SelectItem key={r.id} value={r.id}>
+                                {r.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 /* ─── Specialisations Tab ──────────────────────────────── */
 function SpecialisationsTab() {
-  const [specs, setSpecs] = useState<(Specialisation & { divisions: Division[] })[]>([]);
-  const [form, setForm]   = useState({ name: "", code: "" });
-  const fetch_ = useCallback(async () => { setSpecs(await (await fetch("/api/admin/specialisations")).json()); }, []);
-  useEffect(() => { fetch_(); }, [fetch_]);
-  const addSpec = async () => { await fetch("/api/admin/specialisations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }); setForm({ name: "", code: "" }); fetch_(); };
-
+  const [specs, setSpecs] = useState<Specialisation[]>([]);
+  const [form, setForm] = useState({ name: "", code: "" });
+  const [regenerating, setRegenerating] = useState(false);
+  const [message, setMessage] = useState("");
+  const fetch_ = useCallback(async () => {
+    setSpecs(await (await fetch("/api/admin/specialisations")).json());
+  }, []);
+  useEffect(() => {
+    fetch_();
+  }, [fetch_]);
+  const addSpec = async () => {
+    await fetch("/api/admin/specialisations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    setForm({ name: "", code: "" });
+    fetch_();
+  };
+  const regenerateGroups = async () => {
+    setRegenerating(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/admin/specialisations/regenerate", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.error || "Regeneration failed");
+        return;
+      }
+      setMessage(
+        `Shared groups regenerated: ${data.deletedDuplicateGroups} duplicates merged, ${data.createdAllowedBatchLinks} batch links added, ${data.linkedCourseGroups} course mappings created.`,
+      );
+      fetch_();
+    } finally {
+      setRegenerating(false);
+    }
+  };
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4" style={{ color: C.text }}>Specialisations</h2>
-      <div style={card}>
-        <div className="flex gap-2">
-          <input className={inputCls} style={{ flex: 1 }}   placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <input className={inputCls} style={{ width: 100 }} placeholder="Code" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
-          <button style={qBtn} onClick={addSpec}>Add</button>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+          Specialisations
+        </h2>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={regenerateGroups}
+          disabled={regenerating}
+        >
+          {regenerating ? "Regenerating..." : "Regenerate Shared Groups"}
+        </Button>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {specs.map(s => (
-          <div key={s.id} className="rounded-2xl border p-5 flex flex-col transition-all hover:-translate-y-1 hover:shadow-lg" style={{ background: C.card, borderColor: C.border }}>
-            <div className="text-xl font-bold mb-1" style={{ color: C.text }}>{s.name}</div>
-            <div className="text-sm font-semibold mb-5" style={{ color: C.accentS }}>Code: {s.code}</div>
-            
-            <div className="flex-1">
-              <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Associated Divisions</div>
-              {s.divisions?.length && s.divisions.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {s.divisions.map(d => (
-                    <span key={d.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border shadow-sm" style={{ background: "var(--color-bg-secondary)", borderColor: C.border, color: C.text }}>
-                      {d.name.replace(/^[^-]+-/, '')} <span className="opacity-50 text-[10px] ml-1">Mixed</span>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm italic" style={{ color: C.muted }}>No divisions yet</div>
-              )}
+      <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
+        <CardContent className="p-4">
+          {message ? (
+            <p className="text-xs text-[var(--color-text-secondary)] mb-3">
+              {message}
+            </p>
+          ) : null}
+          <FieldLabel text="Add Specialisation" />
+          <div className="flex gap-2 items-end flex-wrap">
+            <div>
+              <FieldLabel text="Code" />
+              <Input
+                style={{ width: 100 }}
+                placeholder="FIN"
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+                className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+              />
             </div>
-            
-            <div className="mt-5 pt-4 border-t flex justify-between items-center" style={{ borderColor: C.border }}>
-               <span className="text-xs font-medium uppercase tracking-wider" style={{ color: C.sub }}>Total Capacity</span>
-               <span className="text-base font-bold" style={{ color: C.text }}>{s.divisions?.length || 0} Divs</span>
+            <div>
+              <FieldLabel text="Name" />
+              <Input
+                style={{ width: 240 }}
+                placeholder="Finance"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+              />
             </div>
+            <Button size="sm" onClick={addSpec} className="mb-0.5">
+              Add
+            </Button>
           </div>
+        </CardContent>
+      </Card>
+      <div className="grid grid-cols-2 gap-3">
+        {specs.map((s) => (
+          <Card
+            key={s.id}
+            className="bg-[var(--color-bg-card)] border-[var(--color-border)]"
+          >
+            <CardContent className="p-3">
+              <div className="font-semibold text-[var(--color-text-primary)]">
+                {s.name}
+              </div>
+              <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                {s.code} · {s._count?.students ?? 0} students
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>
   );
 }
 
+/* ─── Toggle Chip (shared multi-select helper) ─────────── */
+function ToggleChip({
+  label,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`px-2.5 py-1 text-xs rounded-full border cursor-pointer transition-all whitespace-nowrap ${
+        selected
+          ? "bg-[#531f75] text-white border-[#531f75]"
+          : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[#531f75]/60 hover:text-[#531f75]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+type MultiSelectOption = {
+  id: string;
+  label: string;
+};
+
+function SearchableMultiSelect({
+  label,
+  placeholder,
+  options,
+  selectedIds,
+  onChange,
+  disabled,
+  emptyText = "No options available",
+}: {
+  label: string;
+  placeholder: string;
+  options: MultiSelectOption[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  disabled?: boolean;
+  emptyText?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const selectedOptions = options.filter((option) =>
+    selectedIds.includes(option.id),
+  );
+  const filteredOptions = options.filter((option) =>
+    option.label.toLowerCase().includes(query.toLowerCase()),
+  );
+  const summary =
+    selectedOptions.length === 0
+      ? placeholder
+      : selectedOptions.length <= 2
+        ? selectedOptions.map((option) => option.label).join(", ")
+        : `${selectedOptions[0]?.label}, ${selectedOptions[1]?.label} +${selectedOptions.length - 2}`;
+
+  return (
+    <div className="min-w-0">
+      <FieldLabel text={label} />
+      <Popover>
+        <PopoverTrigger
+          disabled={disabled}
+          className={`flex h-9 w-full items-center justify-between gap-2 rounded-md border px-3 text-sm transition-colors ${
+            disabled
+              ? "cursor-not-allowed border-[var(--color-border)] bg-[var(--color-bg-secondary)]/50 text-[var(--color-text-muted)] opacity-60"
+              : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] hover:border-[#531f75]/60"
+          }`}
+        >
+          <span className="min-w-0 flex-1 truncate text-left">{summary}</span>
+          <span className="shrink-0 text-xs text-[var(--color-text-muted)]">
+            {selectedIds.length > 0
+              ? `${selectedIds.length} selected`
+              : "Select"}
+          </span>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-[360px] max-w-[calc(100vw-3rem)] p-3"
+        >
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${label.toLowerCase()}...`}
+            className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+          />
+          <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => {
+                const selected = selectedIds.includes(option.id);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() =>
+                      onChange(
+                        selected
+                          ? selectedIds.filter((id) => id !== option.id)
+                          : [...selectedIds, option.id],
+                      )
+                    }
+                    className={`flex w-full items-start justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                      selected
+                        ? "border-[#531f75] bg-[#531f75]/10 text-[var(--color-text-primary)]"
+                        : "border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-bg-secondary)]"
+                    }`}
+                  >
+                    <span className="min-w-0 pr-3 break-words">
+                      {option.label}
+                    </span>
+                    <span className="shrink-0 text-xs">
+                      {selected ? "Selected" : ""}
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="py-3 text-center text-xs text-[var(--color-text-muted)]">
+                {emptyText}
+              </p>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+const CREDIT_SESSION_MAP: Record<number, number> = {
+  1: 9,
+  2: 18,
+  3: 26,
+  4: 35,
+};
+const TYPE_COLORS: Record<string, string> = {
+  core: "text-[#531f75] border-[#531f75]/30 bg-[#531f75]/10",
+  specialisation: "text-[#f58220] border-[#f58220]/30 bg-[#f58220]/10",
+  minor: "text-blue-500 border-blue-500/30 bg-blue-500/10",
+  elective: "text-green-600 border-green-600/30 bg-green-600/10",
+};
+
 /* ─── Courses Tab ──────────────────────────────────────── */
 function CoursesTab() {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [terms, setTerms]     = useState<Term[]>([]);
-  const [specs, setSpecs]     = useState<Specialisation[]>([]);
-  const [faculty, setFaculty] = useState<Faculty[]>([]);
-  const empty = { code: "", name: "", credits: "3", termIds: [] as string[], type: "core", specialisationId: "", facultyIds: [] as string[] };
-  const [form, setForm]       = useState(empty);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [error, setError]     = useState("");
-  const [search, setSearch]   = useState("");
-  const [page, setPage]       = useState(1);
-  const PER = 20;
+  const [batches, setBatches] = useState<BatchFull[]>([]);
+  const [allDivisions, setAllDivisions] = useState<Division[]>([]);
+  const [specs, setSpecs] = useState<Specialisation[]>([]);
+  const [allFaculty, setAllFaculty] = useState<Faculty[]>([]);
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
+  const [allTerms, setAllTerms] = useState<Term[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const emptyForm = {
+    code: "",
+    name: "",
+    totalSessions: "26",
+    credits: "3",
+    type: "core",
+    specialisationId: "",
+    selectedBatchIds: [] as string[],
+    termIds: [] as string[],
+    divisionIds: [] as string[],
+    groupIds: [] as string[],
+    facultyIds: [] as string[],
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  const closeCourseForm = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(false);
+    setError("");
+  };
 
   const fetchAll = useCallback(async () => {
-    const [cR, tR, sR, fR] = await Promise.all([
-      fetch("/api/admin/courses"), fetch("/api/admin/terms"), 
-      fetch("/api/admin/specialisations"), fetch("/api/admin/faculty")
+    const [cR, bR, dR, sR, fR, gR, tR] = await Promise.all([
+      fetch("/api/admin/courses"),
+      fetch("/api/admin/batches"),
+      fetch("/api/admin/divisions"),
+      fetch("/api/admin/specialisations"),
+      fetch("/api/admin/faculty"),
+      fetch("/api/admin/groups"),
+      fetch("/api/admin/terms"),
     ]);
-    setCourses(await cR.json()); setTerms(await tR.json()); setSpecs(await sR.json()); setFaculty(await fR.json());
+    setCourses(await cR.json());
+    setBatches(await bR.json());
+    setAllDivisions(await dR.json());
+    setSpecs(await sR.json());
+    setAllFaculty(await fR.json());
+    setAllGroups(await gR.json());
+    setAllTerms(await tR.json());
   }, []);
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
-  const sesMap: Record<string,number> = { "1": 9, "2": 18, "3": 26, "4": 35 };
-
-  const handleFacultyToggle = (fId: number) => {
-    const idStr = fId.toString();
-    setForm(prev => ({
-      ...prev,
-      facultyIds: prev.facultyIds.includes(idStr) 
-        ? prev.facultyIds.filter(id => id !== idStr) 
-        : [...prev.facultyIds, idStr]
-    }));
-  };
-
-  const handleTermToggle = (tId: number) => {
-    const idStr = tId.toString();
-    setForm(prev => ({
-      ...prev,
-      termIds: prev.termIds.includes(idStr) 
-        ? prev.termIds.filter(id => id !== idStr) 
-        : [...prev.termIds, idStr]
-    }));
-  };
-
-  const save = async () => {
+  const handleSave = async () => {
     setError("");
-    const payload = { 
-      code: form.code, name: form.name, credits: parseInt(form.credits), 
-      totalSessions: sesMap[form.credits] || 26, 
-      termIds: form.termIds, 
-      type: form.type, 
-      specialisationId: form.type === "specialisation" && form.specialisationId ? parseInt(form.specialisationId) : null,
-      facultyIds: form.facultyIds
+    const payload = {
+      code: form.code,
+      name: form.name,
+      totalSessions: parseInt(form.totalSessions) || 26,
+      credits: parseInt(form.credits) || 3,
+      type: form.type,
+      specialisationId:
+        form.type === "specialisation" && form.specialisationId
+          ? form.specialisationId
+          : null,
+      termIds: form.termIds,
+      divisionIds: form.divisionIds,
+      groupIds: form.groupIds,
+      facultyIds: form.facultyIds,
     };
     const res = editingId
-      ? await fetch("/api/admin/courses", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingId, ...payload }) })
-      : await fetch("/api/admin/courses", { method: "POST",  headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (res.ok) { setForm(empty); setEditingId(null); fetchAll(); }
-    else { setError((await res.json()).error); }
+      ? await fetch("/api/admin/courses", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingId, ...payload }),
+        })
+      : await fetch("/api/admin/courses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+    if (res.ok) {
+      closeCourseForm();
+      fetchAll();
+    } else {
+      setError((await res.json()).error || "Failed");
+    }
   };
 
-  const filtered   = courses.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.code.toLowerCase().includes(search.toLowerCase()) || c.type.toLowerCase().includes(search.toLowerCase()));
-  const totalPages = Math.ceil(filtered.length / PER);
-  const paged      = filtered.slice((page - 1) * PER, page * PER);
+  const startEdit = (c: Course) => {
+    setEditingId(c.id);
+    const existingTermIds = c.courseTerms?.map((ct) => ct.term.id) ?? [];
+    const existingBatchIds = [
+      ...new Set(
+        c.courseTerms
+          ?.map((ct) => ct.term.batch?.id)
+          .filter(Boolean) as string[],
+      ),
+    ];
+    setForm({
+      code: c.code,
+      name: c.name,
+      totalSessions: String(c.totalSessions),
+      credits: String(c.credits),
+      type: c.type,
+      specialisationId: c.specialisationId || "",
+      selectedBatchIds: existingBatchIds,
+      termIds: existingTermIds,
+      divisionIds: c.courseDivisions?.map((cd) => cd.division.id) ?? [],
+      groupIds: c.courseGroups?.map((cg) => cg.group.id) ?? [],
+      facultyIds: c.facultyCourses?.map((fc) => fc.faculty.id) ?? [],
+    });
+    setShowForm(true);
+    setError("");
+  };
+
+  const toggleId = (arr: string[], id: string) =>
+    arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
+
+  // Batches/terms visible in form
+  const visibleTerms = allTerms.filter((t) =>
+    form.selectedBatchIds.includes(t.batchId),
+  );
+  const visibleDivisions = allDivisions.filter((d) =>
+    form.selectedBatchIds.includes(d.batchId),
+  );
+  const batchOptions = batches.map((batch) => ({
+    id: batch.id,
+    label: batch.name,
+  }));
+  const termOptions = visibleTerms.map((term) => ({
+    id: term.id,
+    label: `${batches.find((b) => b.id === term.batchId)?.name} - ${term.name}`,
+  }));
+  const facultyOptions = allFaculty.map((faculty) => ({
+    id: faculty.id,
+    label: faculty.name,
+  }));
+  // When a batch is deselected, remove its terms and groups too
+  const handleBatchToggle = (batchId: string) => {
+    const newBatchIds = toggleId(form.selectedBatchIds, batchId);
+    const removedBatch = !newBatchIds.includes(batchId);
+    if (removedBatch) {
+      const batchTermIds = allTerms
+        .filter((t) => t.batchId === batchId)
+        .map((t) => t.id);
+      const batchDivisionIds = allDivisions
+        .filter((d) => d.batchId === batchId)
+        .map((d) => d.id);
+      setForm((f) => ({
+        ...f,
+        selectedBatchIds: newBatchIds,
+        termIds: f.termIds.filter((id) => !batchTermIds.includes(id)),
+        divisionIds: f.divisionIds.filter(
+          (id) => !batchDivisionIds.includes(id),
+        ),
+        groupIds: f.groupIds.filter((id) => {
+          const group = allGroups.find((g) => g.id === id);
+          const allowedBatchIds =
+            group?.allowedBatchIds ?? (group?.batchId ? [group.batchId] : []);
+          return allowedBatchIds.some((allowedBatchId) =>
+            newBatchIds.includes(allowedBatchId),
+          );
+        }),
+      }));
+    } else {
+      setForm((f) => ({ ...f, selectedBatchIds: newBatchIds }));
+    }
+  };
+
+  // Groups filtered by selected batches (and type for specialisation courses)
+  const visibleGroups = allGroups.filter((g) => {
+    const allowedBatchIds = g.allowedBatchIds ?? [g.batchId];
+    if (
+      !allowedBatchIds.some((batchId) =>
+        form.selectedBatchIds.includes(batchId),
+      )
+    )
+      return false;
+    if (form.type === "specialisation") return g.type === "specialisation";
+    if (form.type === "elective" || form.type === "minor")
+      return g.type !== "specialisation";
+    return false;
+  });
+  const groupOptions = visibleGroups.map((group) => ({
+    id: group.id,
+    label: group.name,
+  }));
+
+  const columns: ColumnDef<Course>[] = [
+    {
+      accessorKey: "code",
+      header: "Code",
+      size: 120,
+      cell: ({ row }) => (
+        <span className="font-medium text-[var(--color-text-primary)]">
+          {row.original.code}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-primary)]">
+          {row.original.name}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "type",
+      header: "Type",
+      size: 110,
+      cell: ({ row }) => (
+        <Badge
+          variant="outline"
+          className={TYPE_COLORS[row.original.type] ?? TYPE_COLORS.core}
+        >
+          {row.original.type}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "credits",
+      header: "Cr",
+      size: 60,
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original.credits}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "totalSessions",
+      header: "Sess",
+      size: 70,
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original.totalSessions}
+        </span>
+      ),
+    },
+    {
+      header: "Batches",
+      size: 220,
+      cell: ({ row }) => {
+        const batchNames = [
+          ...new Set(
+            row.original.courseTerms
+              ?.map((ct) => ct.term.batch?.name)
+              .filter(Boolean) as string[],
+          ),
+        ];
+        return (
+          <span className="block max-w-[220px] whitespace-normal break-words text-xs leading-5 text-[var(--color-text-muted)]">
+            {batchNames.join(", ") || "—"}
+          </span>
+        );
+      },
+    },
+    {
+      header: "Terms",
+      cell: ({ row }) => {
+        const terms = row.original.courseTerms?.map((ct) => ct.term.name) ?? [];
+        return (
+          <span className="text-xs text-[var(--color-text-muted)]">
+            {terms.join(", ") || "—"}
+          </span>
+        );
+      },
+    },
+    {
+      header: "Divisions",
+      cell: ({ row }) => {
+        const divisions =
+          row.original.courseDivisions?.map((cd) => cd.division.name) ?? [];
+        return (
+          <span className="text-xs text-[var(--color-text-muted)]">
+            {divisions.join(", ") || "—"}
+          </span>
+        );
+      },
+    },
+    {
+      header: "Groups",
+      cell: ({ row }) => {
+        const grps =
+          row.original.courseGroups?.map((cg) => cg.group.name) ?? [];
+        return (
+          <span className="text-xs text-[var(--color-text-muted)]">
+            {grps.join(", ") || "—"}
+          </span>
+        );
+      },
+    },
+    {
+      header: "Faculty",
+      size: 220,
+      cell: ({ row }) => {
+        const facs =
+          row.original.facultyCourses?.map((fc) => fc.faculty.name) ?? [];
+        return (
+          <span className="block max-w-[220px] whitespace-normal break-words text-xs leading-5 text-[var(--color-text-muted)]">
+            {facs.join(", ") || "—"}
+          </span>
+        );
+      },
+    },
+    {
+      id: "actions",
+      size: 60,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-[var(--color-text-muted)] hover:text-[#531f75]"
+          onClick={() => startEdit(row.original)}
+        >
+          <PencilSquareIcon className="w-4 h-4" />
+        </Button>
+      ),
+    },
+  ];
+
+  const sectionLabel =
+    "text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2 mt-4 first:mt-0";
+
+  const courseFormContent = (
+    <>
+      <h3 className="text-sm font-semibold mb-3 text-[var(--color-text-secondary)]">
+        {editingId ? "Edit Course" : "Add Course"}
+      </h3>
+      <Err msg={error} />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div className="min-w-0">
+          <FieldLabel text="Code" />
+          <Input
+            value={form.code}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+            className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+          />
+        </div>
+        <div className="min-w-0">
+          <FieldLabel text="Name" />
+          <Input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">
+        <div className="min-w-0">
+          <FieldLabel text="Type" />
+          <Select
+            value={form.type}
+            onValueChange={(v: string) =>
+              setForm({
+                ...form,
+                type: v,
+                specialisationId: "",
+                divisionIds: v === "core" ? form.divisionIds : [],
+                groupIds: v === "core" ? [] : form.groupIds,
+              })
+            }
+          >
+            <SelectTrigger className="w-full bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="core">Core</SelectItem>
+              <SelectItem value="specialisation">Specialisation</SelectItem>
+              <SelectItem value="minor">Minor</SelectItem>
+              <SelectItem value="elective">Elective</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0">
+          <FieldLabel text="Credits" />
+          <Input
+            type="number"
+            min={1}
+            max={6}
+            value={form.credits}
+            onChange={(e) => {
+              const cr = e.target.value;
+              const autoSess = CREDIT_SESSION_MAP[parseInt(cr)];
+              setForm({
+                ...form,
+                credits: cr,
+                totalSessions: autoSess ? String(autoSess) : form.totalSessions,
+              });
+            }}
+            className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+          />
+        </div>
+        <div className="min-w-0">
+          <FieldLabel text="Sessions (auto)" />
+          <Input
+            type="number"
+            value={form.totalSessions}
+            onChange={(e) =>
+              setForm({ ...form, totalSessions: e.target.value })
+            }
+            className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+          />
+        </div>
+        {form.type === "specialisation" && (
+          <div className="min-w-0">
+            <FieldLabel text="Specialisation" />
+            <Select
+              value={form.specialisationId}
+              onValueChange={(v: string) =>
+                setForm({ ...form, specialisationId: v })
+              }
+            >
+              <SelectTrigger className="w-full bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                <SelectValue placeholder="Select spec" />
+              </SelectTrigger>
+              <SelectContent>
+                {specs.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <SearchableMultiSelect
+          label="Batches"
+          placeholder="Select batches"
+          options={batchOptions}
+          selectedIds={form.selectedBatchIds}
+          onChange={(ids) => {
+            const nextIds = [...ids];
+            const removedBatchId = form.selectedBatchIds.find(
+              (batchId) => !nextIds.includes(batchId),
+            );
+            if (removedBatchId) {
+              handleBatchToggle(removedBatchId);
+              return;
+            }
+            const addedBatchId = nextIds.find(
+              (batchId) => !form.selectedBatchIds.includes(batchId),
+            );
+            if (addedBatchId) {
+              handleBatchToggle(addedBatchId);
+            }
+          }}
+          emptyText="No batches available"
+        />
+
+        <SearchableMultiSelect
+          label="Terms"
+          placeholder="Select terms"
+          options={termOptions}
+          selectedIds={form.termIds}
+          onChange={(ids) => setForm((f) => ({ ...f, termIds: ids }))}
+          disabled={form.selectedBatchIds.length === 0}
+          emptyText="Select batches first"
+        />
+      </div>
+
+      {form.type === "core" && form.selectedBatchIds.length > 0 && (
+        <>
+          <p className={sectionLabel}>Enrolled Divisions</p>
+          <p className="text-xs text-[var(--color-text-muted)] mb-2">
+            Core courses are mandatory for all divisions in the selected
+            batches.
+          </p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {visibleDivisions.map((d) => (
+              <Badge key={d.id} variant="outline" className="text-xs">
+                {`${batches.find((b) => b.id === d.batchId)?.name} - ${d.name}`}
+              </Badge>
+            ))}
+          </div>
+        </>
+      )}
+
+      {form.type !== "core" && (
+        <div className="grid grid-cols-1 gap-3 mb-3">
+          <SearchableMultiSelect
+            label="Enrolled Groups"
+            placeholder="Select groups"
+            options={groupOptions}
+            selectedIds={form.groupIds}
+            onChange={(ids) => setForm((f) => ({ ...f, groupIds: ids }))}
+            disabled={form.selectedBatchIds.length === 0}
+            emptyText="No groups available"
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 mb-4">
+        <SearchableMultiSelect
+          label="Faculty"
+          placeholder="Select faculty"
+          options={facultyOptions}
+          selectedIds={form.facultyIds}
+          onChange={(ids) => setForm((f) => ({ ...f, facultyIds: ids }))}
+          emptyText="No faculty available"
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <Button onClick={handleSave}>
+          {editingId ? "Save Changes" : "Add Course"}
+        </Button>
+        <Button variant="outline" onClick={closeCourseForm}>
+          Cancel
+        </Button>
+      </div>
+    </>
+  );
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold" style={{ color: C.text }}>📘 Courses</h2>
-        <input type="text" className={inputCls} placeholder="Search courses..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ padding: "6px 12px", width: 250 }} />
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+          Courses ({courses.length})
+        </h2>
+        <Button
+          size="sm"
+          onClick={() => {
+            closeCourseForm();
+            setShowForm(true);
+          }}
+          className="gap-1.5"
+        >
+          <PlusIcon className="w-4 h-4" /> Add Course
+        </Button>
       </div>
 
-      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mb-6 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none" />
-        
-        <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-6">
-          {editingId ? "✏️ Edit Course" : "✨ Add New Course"}
-        </h3>
-        
-        <Err msg={error} />
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5 mb-6 relative z-10">
-          
-          <div className="lg:col-span-3 space-y-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Course Code</label>
-            <input className="w-full bg-black/40 border border-white/10 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-2.5 text-gray-100 placeholder-gray-600 outline-none transition-all duration-300" placeholder="FIN101" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
-          </div>
-
-          <div className="lg:col-span-5 space-y-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Course Name</label>
-            <input className="w-full bg-black/40 border border-white/10 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-2.5 text-gray-100 placeholder-gray-600 outline-none transition-all duration-300" placeholder="Financial Accounting" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          </div>
-
-          <div className="lg:col-span-2 space-y-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Credits</label>
-            <div className="flex gap-2 items-center">
-              <select className="flex-1 bg-black/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-3 py-2.5 text-gray-100 outline-none transition-all cursor-pointer appearance-none" value={form.credits} onChange={e => setForm({ ...form, credits: e.target.value })}>
-                 {["1","2","3","4"].map(c => <option key={c} value={c} className="bg-gray-900">{c} Credits</option>)}
-              </select>
+      {showForm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-black/40 p-4">
+          <div className="mx-auto my-6 w-full max-w-4xl overflow-hidden bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+              <div className="font-semibold text-[var(--color-text-primary)]">
+                {editingId ? "Edit Course" : "Add Course"}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={closeCourseForm}
+              >
+                ✕
+              </Button>
             </div>
-            <div className="text-[10px] text-gray-500 font-medium px-1">({sesMap[form.credits]} mandatory sessions)</div>
-          </div>
-
-          <div className="lg:col-span-2 space-y-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Type</label>
-            <select className="w-full bg-black/40 border border-white/10 focus:border-indigo-500/50 rounded-xl px-4 py-2.5 text-gray-100 outline-none transition-all cursor-pointer appearance-none" value={form.type} onChange={e => setForm({ ...form, type: e.target.value, specialisationId: "" })}>
-               <option className="bg-gray-900" value="core">Core</option><option className="bg-gray-900" value="specialisation">Specialisation</option><option className="bg-gray-900" value="elective">Elective</option>
-            </select>
-          </div>
-
-          {form.type === "specialisation" && (
-            <div className="lg:col-span-12 space-y-1.5 animate-fadeIn">
-              <label className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Select Specialisation</label>
-              <select className="w-full lg:w-1/3 bg-black/40 border border-indigo-500/30 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-indigo-100 outline-none transition-all cursor-pointer appearance-none" value={form.specialisationId} onChange={e => setForm({ ...form, specialisationId: e.target.value })}>
-                 <option className="bg-gray-900" value="">Choose a Specialisation...</option>{specs.map(s => <option className="bg-gray-900" key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
-              </select>
+            <div className="p-4 md:p-5 overflow-x-hidden">
+              {courseFormContent}
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          <div className="lg:col-span-6 space-y-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex justify-between">
-              <span>Mapped Terms</span>
-              <span className="text-indigo-400 font-bold">{form.termIds.length} Selected</span>
-            </label>
-            <div className="flex flex-col gap-1.5 h-48 overflow-y-auto px-2 py-3 rounded-xl border border-white/5 bg-black/20 styled-scrollbar">
-              {terms.length === 0 ? <p className="text-xs text-center p-4 text-gray-500 italic">No terms available. Create one in Programmes.</p> : null}
-              {terms.map(t => (
-                <label key={t.id} className={`flex items-center gap-3 text-sm p-2 rounded-lg cursor-pointer transition-all duration-200 ${form.termIds.includes(t.id.toString()) ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-100' : 'hover:bg-white/5 border border-transparent text-gray-400 hover:text-gray-200'}`}>
-                  <input type="checkbox" className="accent-indigo-500 w-4 h-4 rounded focus:ring-indigo-500 focus:ring-offset-gray-900 cursor-pointer" checked={form.termIds.includes(t.id.toString())} onChange={() => handleTermToggle(t.id)} />
-                  <span className="truncate flex-1 font-medium">{t.programme?.code} <span className="opacity-50 mx-1">—</span> Term {t.number}</span>
-                </label>
+      <DataTable
+        columns={columns}
+        data={courses}
+        searchPlaceholder="Search by code or name..."
+      />
+    </div>
+  );
+}
+
+/* ─── Groups Tab ───────────────────────────────────────── */
+interface GroupWithMembers extends Group {
+  members?: { student: Student }[];
+}
+
+function GroupsTab() {
+  const [groups, setGroups] = useState<GroupWithMembers[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [specs, setSpecs] = useState<Specialisation[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [rooms, setRooms] = useState<Array<{ id: string; name: string }>>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState("");
+  const emptyForm = {
+    name: "",
+    allowedBatchIds: [] as string[],
+    type: "specialisation",
+    specialisationId: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  // Member management state
+  const [managingGroup, setManagingGroup] = useState<GroupWithMembers | null>(
+    null,
+  );
+  const [batchStudents, setBatchStudents] = useState<Student[]>([]);
+  const [stagedIds, setStagedIds] = useState<string[]>([]); // current draft membership
+  const [memberSaving, setMemberSaving] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+  // Edit group state
+  const [editingGroup, setEditingGroup] = useState<GroupWithMembers | null>(
+    null,
+  );
+  const [editForm, setEditForm] = useState({
+    name: "",
+    allowedBatchIds: [] as string[],
+    defaultRoomId: "__none__",
+    termRoomAssignments: [] as Array<{ termId: string; roomId: string }>,
+  });
+  const [editError, setEditError] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [undoAutoClean, setUndoAutoClean] = useState<{
+    previousAllowedBatchIds: string[];
+    previousMemberIds: string[];
+    removedCount: number;
+  } | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    const [gR, bR, sR, tR, rR] = await Promise.all([
+      fetch("/api/admin/groups"),
+      fetch("/api/admin/batches"),
+      fetch("/api/admin/specialisations"),
+      fetch("/api/admin/terms"),
+      fetch("/api/admin/rooms"),
+    ]);
+    setGroups(await gR.json());
+    setBatches(await bR.json());
+    setSpecs(await sR.json());
+    setTerms(await tR.json());
+    setRooms(await rR.json());
+  }, []);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const handleAdd = async () => {
+    setError("");
+    const batchId = form.allowedBatchIds[0];
+    if (!batchId) {
+      setError("Select at least one allowed batch");
+      return;
+    }
+    const res = await fetch("/api/admin/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...form,
+        batchId,
+        allowedBatchIds: form.allowedBatchIds,
+        specialisationId: form.specialisationId || null,
+      }),
+    });
+    if (res.ok) {
+      setForm(emptyForm);
+      setShowForm(false);
+      fetchAll();
+    } else {
+      setError((await res.json()).error || "Failed");
+    }
+  };
+
+  const openManage = async (g: GroupWithMembers) => {
+    setManagingGroup(g);
+    setMemberSearch("");
+    const allowedBatchIds = g.allowedBatchIds ?? [g.batchId];
+    const params = new URLSearchParams({
+      batchIds: allowedBatchIds.join(","),
+    });
+    if (g.type === "specialisation" && g.specialisationId) {
+      params.set("specialisationId", g.specialisationId);
+    }
+    const sRes = await fetch(`/api/admin/students?${params.toString()}`);
+    const students: Student[] = sRes.ok ? await sRes.json() : [];
+    setBatchStudents(students);
+    const currentMemberIds = students
+      .filter((s) => s.groups?.some((sg) => sg.groupId === g.id))
+      .map((s) => s.id);
+    setStagedIds(currentMemberIds);
+  };
+
+  const saveMembers = async () => {
+    if (!managingGroup) return;
+    setMemberSaving(true);
+    await fetch("/api/admin/groups", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: managingGroup.id, studentIds: stagedIds }),
+    });
+    setMemberSaving(false);
+    setManagingGroup(null);
+    fetchAll();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this group? This cannot be undone.")) return;
+    const res = await fetch(`/api/admin/groups?id=${id}`, { method: "DELETE" });
+    if (res.ok) {
+      fetchAll();
+    } else {
+      alert((await res.json()).error || "Cannot delete");
+    }
+  };
+
+  const openEdit = (g: GroupWithMembers) => {
+    setEditingGroup(g);
+    setEditForm({
+      name: g.name,
+      allowedBatchIds: g.allowedBatchIds ?? [],
+      defaultRoomId: g.defaultRoomId ?? "__none__",
+      termRoomAssignments: (g.termRoomAssignments ?? []).map((item) => ({
+        termId: item.termId,
+        roomId: item.roomId,
+      })),
+    });
+    setEditError("");
+    setUndoAutoClean(null);
+  };
+
+  const sameBatchSelection = (left: string[], right: string[]) => {
+    if (left.length !== right.length) return false;
+    const leftSet = new Set(left);
+    return right.every((id) => leftSet.has(id));
+  };
+
+  const getCurrentMemberIds = async (
+    groupId: string,
+    batchIds: string[],
+    specialisationId?: string | null,
+  ) => {
+    if (batchIds.length === 0) return [] as string[];
+    const params = new URLSearchParams({ batchIds: batchIds.join(",") });
+    if (specialisationId) {
+      params.set("specialisationId", specialisationId);
+    }
+    const sRes = await fetch(`/api/admin/students?${params.toString()}`);
+    const students: Student[] = sRes.ok ? await sRes.json() : [];
+    return students
+      .filter((s) => s.groups?.some((sg) => sg.groupId === groupId))
+      .map((s) => s.id);
+  };
+
+  const handleUndoAutoClean = async () => {
+    if (!editingGroup || !undoAutoClean) return;
+    setEditSaving(true);
+    setEditError("");
+    const res = await fetch("/api/admin/groups", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editingGroup.id,
+        name: editForm.name,
+        allowedBatchIds: undoAutoClean.previousAllowedBatchIds,
+        defaultRoomId:
+          editForm.defaultRoomId === "__none__" ? null : editForm.defaultRoomId,
+        termRoomAssignments: editForm.termRoomAssignments,
+        studentIds: undoAutoClean.previousMemberIds,
+      }),
+    });
+    const payload = await res.json().catch(() => null);
+    setEditSaving(false);
+    if (!res.ok) {
+      setEditError(payload?.error || "Failed to undo");
+      return;
+    }
+    setEditForm((current) => ({
+      ...current,
+      allowedBatchIds: undoAutoClean.previousAllowedBatchIds,
+    }));
+    setUndoAutoClean(null);
+    fetchAll();
+  };
+
+  const handleEdit = async () => {
+    if (!editingGroup) return;
+    setEditError("");
+    if (editForm.allowedBatchIds.length === 0) {
+      setEditError("Select at least one allowed batch");
+      return;
+    }
+
+    const previousAllowedBatchIds = editingGroup.allowedBatchIds ?? [];
+    const allowedBatchesChanged = !sameBatchSelection(
+      previousAllowedBatchIds,
+      editForm.allowedBatchIds,
+    );
+    const previousMemberIds = allowedBatchesChanged
+      ? await getCurrentMemberIds(
+          editingGroup.id,
+          previousAllowedBatchIds,
+          editingGroup.specialisationId,
+        )
+      : [];
+
+    setEditSaving(true);
+    const res = await fetch("/api/admin/groups", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editingGroup.id,
+        name: editForm.name,
+        allowedBatchIds: editForm.allowedBatchIds,
+        defaultRoomId:
+          editForm.defaultRoomId === "__none__" ? null : editForm.defaultRoomId,
+        termRoomAssignments: editForm.termRoomAssignments,
+      }),
+    });
+
+    const payload = await res.json().catch(() => null);
+    setEditSaving(false);
+    if (res.ok) {
+      if ((payload?.autoRemovedMembersCount ?? 0) > 0) {
+        setUndoAutoClean({
+          previousAllowedBatchIds,
+          previousMemberIds,
+          removedCount: payload.autoRemovedMembersCount,
+        });
+        setEditingGroup((current) =>
+          current
+            ? {
+                ...current,
+                name: editForm.name,
+                allowedBatchIds: editForm.allowedBatchIds,
+              }
+            : current,
+        );
+        fetchAll();
+        return;
+      }
+      setEditingGroup(null);
+      setUndoAutoClean(null);
+      fetchAll();
+    } else {
+      setEditError(payload?.error || "Failed");
+    }
+  };
+
+  // Filtered students for the "add members" list
+  const filteredBatchStudents = batchStudents.filter((s) => {
+    if (memberSearch) {
+      const q = memberSearch.toLowerCase();
+      return (
+        s.user.name.toLowerCase().includes(q) ||
+        (s.rollNumber || "").toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+  const inGroup = filteredBatchStudents.filter((s) => stagedIds.includes(s.id));
+  const notInGroup = filteredBatchStudents.filter(
+    (s) => !stagedIds.includes(s.id),
+  );
+
+  const typeLabel: Record<string, string> = {
+    specialisation: "Spec",
+    common_elective: "Common Elec",
+    open_elective: "Open Elec",
+  };
+
+  const columns: ColumnDef<GroupWithMembers>[] = [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="font-medium text-[var(--color-text-primary)]">
+          {row.original.name}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "type",
+      header: "Type",
+      size: 130,
+      cell: ({ row }) => (
+        <Badge variant="outline" className="text-xs">
+          {typeLabel[row.original.type] ?? row.original.type}
+        </Badge>
+      ),
+    },
+    {
+      header: "Allowed Batches",
+      cell: ({ row }) => (
+        <span className="text-xs text-[var(--color-text-muted)]">
+          {(
+            row.original.allowedBatches?.map((batch) => batch.name) ??
+            [row.original.batch?.name].filter(Boolean)
+          ).join(", ") || "—"}
+        </span>
+      ),
+    },
+    {
+      header: "Specialisation/Group",
+      cell: ({ row }) => (
+        <span className="text-xs text-[var(--color-text-muted)]">
+          {row.original.type === "specialisation"
+            ? row.original.specialisation?.name || "—"
+            : (typeLabel[row.original.type] ?? row.original.type)}
+        </span>
+      ),
+    },
+    {
+      header: "Members",
+      size: 90,
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original._count?.members ?? 0}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      size: 160,
+      cell: ({ row }) => (
+        <div className="flex gap-1 items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-[var(--color-text-muted)] hover:text-[#531f75]"
+            title="Edit group"
+            onClick={() => openEdit(row.original)}
+          >
+            <PencilSquareIcon className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-[var(--color-text-muted)] hover:text-[#531f75]"
+            onClick={() => openManage(row.original)}
+          >
+            Members
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-[var(--color-text-muted)] hover:text-red-500"
+            onClick={() => handleDelete(row.original.id)}
+          >
+            <TrashIcon className="w-4 h-4" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const groupedTermsForEdit = useMemo(() => {
+    const bucket = new Map<
+      number,
+      { number: number; name: string; termIds: string[] }
+    >();
+    terms
+      .filter((term) => editForm.allowedBatchIds.includes(term.batchId))
+      .forEach((term) => {
+        const existing = bucket.get(term.number);
+        if (!existing) {
+          bucket.set(term.number, {
+            number: term.number,
+            name: term.name,
+            termIds: [term.id],
+          });
+          return;
+        }
+        existing.termIds.push(term.id);
+      });
+
+    return Array.from(bucket.values()).sort((a, b) => a.number - b.number);
+  }, [terms, editForm.allowedBatchIds]);
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+          Groups ({groups.length})
+        </h2>
+        <Button
+          size="sm"
+          onClick={() => {
+            setForm(emptyForm);
+            setError("");
+            setShowForm(!showForm);
+          }}
+          className="gap-1.5"
+        >
+          <PlusIcon className="w-4 h-4" /> Add Group
+        </Button>
+      </div>
+
+      {showForm && (
+        <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
+          <CardContent className="p-4">
+            <h3 className="text-sm font-semibold mb-3 text-[var(--color-text-secondary)]">
+              Add Group
+            </h3>
+            <Err msg={error} />
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <FieldLabel text="Type" />
+                <Select
+                  value={form.type}
+                  onValueChange={(v) =>
+                    setForm({ ...form, type: v, specialisationId: "" })
+                  }
+                >
+                  <SelectTrigger className="bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="specialisation">
+                      Specialisation
+                    </SelectItem>
+                    <SelectItem value="common_elective">
+                      Common Elective
+                    </SelectItem>
+                    <SelectItem value="open_elective">Open Elective</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.type === "specialisation" && (
+                <div>
+                  <FieldLabel text="Specialisation" />
+                  <Select
+                    value={form.specialisationId}
+                    onValueChange={(v) =>
+                      setForm({ ...form, specialisationId: v })
+                    }
+                  >
+                    <SelectTrigger className="bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)]">
+                      <SelectValue placeholder="Select spec" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {specs.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div>
+                <FieldLabel
+                  text={
+                    form.type === "specialisation"
+                      ? "Group Suffix (e.g. A, B)"
+                      : "Group Name"
+                  }
+                />
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder={
+                    form.type === "specialisation" ? "A" : "COMMON_ELEC_1"
+                  }
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2">
+              Allowed Batches
+            </p>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {batches.map((batch) => (
+                <ToggleChip
+                  key={batch.id}
+                  label={batch.name}
+                  selected={form.allowedBatchIds.includes(batch.id)}
+                  onToggle={() =>
+                    setForm((current) => ({
+                      ...current,
+                      allowedBatchIds: current.allowedBatchIds.includes(
+                        batch.id,
+                      )
+                        ? current.allowedBatchIds.filter(
+                            (id) => id !== batch.id,
+                          )
+                        : [...current.allowedBatchIds, batch.id],
+                    }))
+                  }
+                />
               ))}
             </div>
-          </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleAdd}>
+                Add Group
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setShowForm(false);
+                  setError("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-          <div className="lg:col-span-6 space-y-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex justify-between">
-              <span>Teaching Faculty</span>
-              <span className="text-emerald-400 font-bold">{form.facultyIds.length} Assigned</span>
-            </label>
-            <div className="flex flex-col gap-1.5 h-48 overflow-y-auto px-2 py-3 rounded-xl border border-white/5 bg-black/20 styled-scrollbar">
-              {faculty.length === 0 ? <p className="text-xs text-center p-4 text-gray-500 italic">No faculty available. Add them in the Faculty tab.</p> : null}
-              {faculty.map(f => (
-                <label key={f.id} className={`flex items-center gap-3 text-sm p-2 rounded-lg cursor-pointer transition-all duration-200 ${form.facultyIds.includes(f.id.toString()) ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-100' : 'hover:bg-white/5 border border-transparent text-gray-400 hover:text-gray-200'}`}>
-                  <input type="checkbox" className="accent-emerald-500 w-4 h-4 rounded focus:ring-emerald-500 focus:ring-offset-gray-900 cursor-pointer" checked={form.facultyIds.includes(f.id.toString())} onChange={() => handleFacultyToggle(f.id)} />
-                  <div className="flex flex-col truncate">
-                    <span className="font-medium">{f.name}</span>
-                    {f.teachingArea && <span className="text-[10px] opacity-60 font-medium tracking-wide uppercase">{f.teachingArea}</span>}
+      <DataTable
+        columns={columns}
+        data={groups}
+        searchPlaceholder="Search groups..."
+      />
+
+      {/* ── Edit Group Panel ─────────────────── */}
+      {editingGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl shadow-xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+              <div className="font-semibold text-[var(--color-text-primary)]">
+                Edit Group — {editingGroup.name}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setEditingGroup(null)}
+              >
+                ✕
+              </Button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {editError && <p className="text-xs text-red-500">{editError}</p>}
+              {undoAutoClean && (
+                <div className="rounded-md border border-amber-300/40 bg-amber-500/10 px-3 py-2">
+                  <p className="text-xs text-amber-200">
+                    {undoAutoClean.removedCount} member(s) were auto-removed
+                    after changing allowed batches.
+                  </p>
+                  <div className="mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleUndoAutoClean}
+                      disabled={editSaving}
+                    >
+                      Undo
+                    </Button>
                   </div>
-                </label>
-              ))}
+                </div>
+              )}
+              <div>
+                <FieldLabel text="Group Name" />
+                <Input
+                  value={editForm.name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, name: e.target.value })
+                  }
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2">
+                  Allowed Batches
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {batches.map((batch) => (
+                    <ToggleChip
+                      key={batch.id}
+                      label={batch.name}
+                      selected={editForm.allowedBatchIds.includes(batch.id)}
+                      onToggle={() =>
+                        setEditForm((current) => ({
+                          ...current,
+                          allowedBatchIds: current.allowedBatchIds.includes(
+                            batch.id,
+                          )
+                            ? current.allowedBatchIds.filter(
+                                (id) => id !== batch.id,
+                              )
+                            : [...current.allowedBatchIds, batch.id],
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <FieldLabel text="Default Room" />
+                <Select
+                  value={editForm.defaultRoomId}
+                  onValueChange={(value) =>
+                    setEditForm((current) => ({
+                      ...current,
+                      defaultRoomId: value,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {rooms.map((room) => (
+                      <SelectItem key={room.id} value={room.id}>
+                        {room.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2">
+                  Term-wise Fixed Rooms
+                </p>
+                <div className="space-y-2">
+                  {groupedTermsForEdit.map((termGroup) => {
+                    const assignedRoomId =
+                      editForm.termRoomAssignments.find((item) =>
+                        termGroup.termIds.includes(item.termId),
+                      )?.roomId ?? "__none__";
+                    return (
+                      <div
+                        key={termGroup.number}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <span className="text-xs text-[var(--color-text-secondary)] min-w-[150px]">
+                          {termGroup.name}
+                        </span>
+                        <Select
+                          value={assignedRoomId}
+                          onValueChange={(value) =>
+                            setEditForm((current) => {
+                              const filtered =
+                                current.termRoomAssignments.filter(
+                                  (item) =>
+                                    !termGroup.termIds.includes(item.termId),
+                                );
+                              if (value !== "__none__") {
+                                termGroup.termIds.forEach((termId) => {
+                                  filtered.push({ termId, roomId: value });
+                                });
+                              }
+                              return {
+                                ...current,
+                                termRoomAssignments: filtered,
+                              };
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs w-[180px] bg-[var(--color-bg-secondary)] border-[var(--color-border)]">
+                            <SelectValue placeholder="None" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {rooms.map((room) => (
+                              <SelectItem key={room.id} value={room.id}>
+                                {room.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-[var(--color-border)] flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEditingGroup(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleEdit}
+                disabled={editSaving}
+                className="bg-[#531f75] hover:bg-[#531f75]/90"
+              >
+                {editSaving ? "Saving…" : "Save Changes"}
+              </Button>
             </div>
           </div>
-
         </div>
+      )}
 
-        <div className="flex gap-3 justify-end pt-4 border-t border-white/10 relative z-10 mt-6">
-          {editingId && (
-            <button className="px-5 py-2.5 rounded-xl border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors" onClick={() => { setEditingId(null); setForm(empty); }}>
-              Cancel
-            </button>
-          )}
-          <button className={`px-6 py-2.5 rounded-xl font-bold text-white shadow-lg transition-all duration-300 hover:-translate-y-0.5 ${editingId ? "bg-gradient-to-r from-emerald-500 to-teal-500 hover:shadow-emerald-500/25" : "bg-gradient-to-r from-indigo-500 to-purple-500 hover:shadow-indigo-500/25"}`} onClick={save}>
-            {editingId ? "Save Changes" : "Create Course"}
-          </button>
+      {/* ── Manage Members Panel ─────────────── */}
+      {managingGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-2xl bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-2xl shadow-xl flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+              <div>
+                <div className="font-semibold text-[var(--color-text-primary)]">
+                  Manage Members — {managingGroup.name}
+                </div>
+                <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  {(
+                    managingGroup.allowedBatches?.map((batch) => batch.name) ??
+                    [managingGroup.batch?.name].filter(Boolean)
+                  ).join(", ")}{" "}
+                  · {stagedIds.length} selected
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setManagingGroup(null)}
+              >
+                ✕
+              </Button>
+            </div>
+            <div className="px-4 pt-3 pb-2">
+              <Input
+                placeholder="Search by name or roll..."
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                className="bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-sm"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-2 grid grid-cols-2 gap-2 min-h-0">
+              {/* In group */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2 sticky top-0 bg-[var(--color-bg-card)] py-1">
+                  In Group ({inGroup.length})
+                </p>
+                {inGroup.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between py-1.5 border-b border-[var(--color-border)] last:border-0"
+                  >
+                    <div>
+                      <div className="text-sm text-[var(--color-text-primary)]">
+                        {s.user.name}
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)]">
+                        {s.rollNumber || "—"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setStagedIds((ids) => ids.filter((id) => id !== s.id))
+                      }
+                      className="text-red-400 hover:text-red-600 text-xs px-1.5 py-0.5 rounded hover:bg-red-500/10 cursor-pointer"
+                    >
+                      × Remove
+                    </button>
+                  </div>
+                ))}
+                {inGroup.length === 0 && (
+                  <p className="text-xs text-[var(--color-text-muted)] py-2">
+                    No members in group
+                  </p>
+                )}
+              </div>
+              {/* Not in group */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-2 sticky top-0 bg-[var(--color-bg-card)] py-1">
+                  Eligible Students ({notInGroup.length})
+                </p>
+                {notInGroup.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between py-1.5 border-b border-[var(--color-border)] last:border-0"
+                  >
+                    <div>
+                      <div className="text-sm text-[var(--color-text-primary)]">
+                        {s.user.name}
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)]">
+                        {s.rollNumber || "—"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setStagedIds((ids) => [...ids, s.id])}
+                      className="text-[#531f75] hover:text-[#531f75]/80 text-xs px-1.5 py-0.5 rounded hover:bg-[#531f75]/10 cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                ))}
+                {notInGroup.length === 0 && (
+                  <p className="text-xs text-[var(--color-text-muted)] py-2">
+                    All eligible students added
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-[var(--color-border)] flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setManagingGroup(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={saveMembers}
+                disabled={memberSaving}
+                className="bg-[#531f75] hover:bg-[#531f75]/90"
+              >
+                {memberSaving ? "Saving…" : "Save Changes"}
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden shadow-xl">
-        <table className="w-full text-left text-sm text-gray-300">
-          <thead className="text-xs uppercase bg-black/40 text-gray-400 border-b border-white/10">
-            <tr>
-              <th className="px-6 py-4 font-semibold tracking-wider">Code</th>
-              <th className="px-6 py-4 font-semibold tracking-wider">Name</th>
-              <th className="px-6 py-4 font-semibold tracking-wider">Type</th>
-              <th className="px-6 py-4 font-semibold tracking-wider">Credits & Sessions</th>
-              <th className="px-6 py-4 font-semibold tracking-wider w-64">Mapped Terms</th>
-              <th className="px-6 py-4 font-semibold tracking-wider w-64">Faculty Assigned</th>
-              <th className="px-6 py-4 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {paged.map((c: any) => (
-              <tr key={c.id} className="hover:bg-white/[0.02] transition-colors duration-200">
-                <td className="px-6 py-4 font-semibold text-white whitespace-nowrap">{c.code}</td>
-                <td className="px-6 py-4 font-medium text-gray-200">{c.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full ${
-                    c.type === "core" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20" : 
-                    c.type === "specialisation" ? "bg-amber-500/20 text-amber-400 border border-amber-500/20" : 
-                    "bg-rose-500/20 text-rose-400 border border-rose-500/20"
-                  }`}>
-                    {c.type}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-gray-400 font-medium whitespace-nowrap">
-                  <span className="text-gray-300">{c.credits}</span> Cr <span className="opacity-50 mx-1">•</span> <span className="text-gray-300">{c.totalSessions}</span> Sess
-                </td>
-                <td className="px-6 py-4">
-                  {c.courseTerms && c.courseTerms.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 max-w-[250px]">
-                      {c.courseTerms.map((ct: any) => (
-                         <span key={ct.termId} className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 rounded text-[10px] font-semibold tracking-wide whitespace-nowrap" title={ct.term.programme?.name}>
-                           {ct.term.programme?.code} <span className="opacity-60">T{ct.term.number}</span>
-                         </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {c.specialisation ? <span className="inline-block mt-2 px-2 py-0.5 bg-gray-800 border border-gray-700 text-gray-300 rounded text-[10px] font-medium max-w-[200px] truncate" title={c.specialisation.name}>{c.specialisation.name}</span> : null}
-                  {(!c.courseTerms || c.courseTerms.length === 0) && !c.specialisation && <span className="text-gray-600 italic text-xs">Unmapped</span>}
-                </td>
-                <td className="px-6 py-4">
-                  {c.facultyCourses && c.facultyCourses.length > 0 ? (
-                    <div className="flex flex-col gap-1 max-w-[200px]">
-                      {c.facultyCourses.map((fc: any) => (
-                        <div key={fc.facultyId} className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 shrink-0"></div>
-                          <span className="text-xs text-gray-300 truncate hover:text-white transition-colors cursor-default" title={fc.faculty.name}>
-                            {fc.faculty.name}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-[11px] uppercase tracking-wider font-semibold text-rose-500/70 bg-rose-500/10 px-2 py-1 rounded inline-block">Unassigned</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-right whitespace-nowrap relative">
-                  <button className="p-2 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition-all duration-200 hover:scale-110 active:scale-95 group focus:outline-none focus:ring-2 focus:ring-indigo-500/50" 
-                    title="Edit Course"
-                    onClick={() => { 
-                    setEditingId(c.id); 
-                    setForm({ 
-                      code: c.code, name: c.name, credits: c.credits.toString(), 
-                      termIds: c.courseTerms ? c.courseTerms.map((ct: any) => ct.termId.toString()) : [], 
-                      type: c.type, 
-                      specialisationId: c.specialisationId?.toString() || "",
-                      facultyIds: c.facultyCourses ? c.facultyCourses.map((fc: any) => fc.facultyId.toString()) : []
-                    });
-                    
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Pagination page={page} total={totalPages} onChange={setPage} />
+      )}
     </div>
   );
 }
@@ -679,207 +3182,572 @@ function CoursesTab() {
 /* ─── Faculty Tab ──────────────────────────────────────── */
 function FacultyTab() {
   const [faculty, setFaculty] = useState<Faculty[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
   const empty = { name: "", email: "", teachingArea: "" };
-  const [form, setForm]       = useState(empty);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [error, setError]     = useState("");
-  const [search, setSearch]   = useState("");
-  const [page, setPage]       = useState(1);
-  const PER = 20;
-  const fetch_ = useCallback(async () => { setFaculty(await (await fetch("/api/admin/faculty")).json()); }, []);
-  useEffect(() => { fetch_(); }, [fetch_]);
-
+  const [form, setForm] = useState(empty);
+  const fetchAll = useCallback(async () => {
+    setFaculty(await (await fetch("/api/admin/faculty")).json());
+  }, []);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
   const save = async () => {
     setError("");
     const res = editingId
-      ? await fetch("/api/admin/faculty", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingId, ...form }) })
-      : await fetch("/api/admin/faculty", { method: "POST",  headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-    if (res.ok) { setForm(empty); setEditingId(null); fetch_(); }
-    else { setError((await res.json()).error); }
+      ? await fetch("/api/admin/faculty", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingId, ...form }),
+        })
+      : await fetch("/api/admin/faculty", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+    if (res.ok) {
+      setForm(empty);
+      setShowForm(false);
+      setEditingId(null);
+      fetchAll();
+    } else {
+      setError((await res.json()).error || "Failed");
+    }
   };
-
-  const AREAS = ["Finance and Accounting","Marketing","Information Management and Analytics","Operations Supply Chain Management & Quantitative Methods","Economics & Policy","Organisation & Leadership Studies","Strategy"];
-  const filtered   = faculty.filter((f: any) => f.name.toLowerCase().includes(search.toLowerCase()) || (f.email || "").toLowerCase().includes(search.toLowerCase()) || (f.teachingArea || "").toLowerCase().includes(search.toLowerCase()));
-  const totalPages = Math.ceil(filtered.length / PER);
-  const paged      = filtered.slice((page - 1) * PER, page * PER);
-
+  const startEdit = (f: Faculty) => {
+    setEditingId(f.id);
+    setForm({
+      name: f.name,
+      email: f.email,
+      teachingArea: f.teachingArea || "",
+    });
+    setShowForm(true);
+  };
+  const columns: ColumnDef<Faculty>[] = [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="font-medium text-[var(--color-text-primary)]">
+          {row.original.name}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "email",
+      header: "Email",
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original.email}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "teachingArea",
+      header: "Teaching Area",
+      cell: ({ row }) => (
+        <span className="text-xs text-[var(--color-text-secondary)]">
+          {row.original.teachingArea || "—"}
+        </span>
+      ),
+    },
+    {
+      accessorFn: (r) => r._count?.courses,
+      header: "Courses",
+      size: 80,
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original._count?.courses || 0}
+        </span>
+      ),
+    },
+    {
+      accessorFn: (r) => r._count?.timetable,
+      header: "Slots",
+      size: 80,
+      cell: ({ row }) => (
+        <span className="text-[var(--color-text-secondary)]">
+          {row.original._count?.timetable || 0}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      size: 60,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-[var(--color-text-muted)] hover:text-[#531f75]"
+          onClick={() => startEdit(row.original)}
+        >
+          <PencilSquareIcon className="w-4 h-4" />
+        </Button>
+      ),
+    },
+  ];
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold" style={{ color: C.text }}>👨‍🏫 Faculty</h2>
-        <input type="text" className={inputCls} placeholder="Search faculty..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ padding: "6px 12px", width: 250 }} />
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+          Faculty ({faculty.length})
+        </h2>
+        <Button
+          size="sm"
+          onClick={() => {
+            setEditingId(null);
+            setForm(empty);
+            setShowForm(!showForm);
+          }}
+          className="gap-1.5"
+        >
+          <PlusIcon className="w-4 h-4" /> Add Faculty
+        </Button>
       </div>
-      <div style={card}>
-        <Label text={editingId ? "✏️ Edit" : "Add Faculty"} />
-        <Err msg={error} />
-        <div className="flex gap-2 flex-wrap">
-          <input className={inputCls} style={{ flex: 1 }}   placeholder="Name"  value={form.name}         onChange={e => setForm({ ...form, name: e.target.value })} />
-          <input className={inputCls} style={{ flex: 1 }}   placeholder="Email" value={form.email}        onChange={e => setForm({ ...form, email: e.target.value })} />
-          <select className={inputCls} style={{ width: 220 }} value={form.teachingArea} onChange={e => setForm({ ...form, teachingArea: e.target.value })}>
-            <option value="">Teaching Area</option>{AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <button style={qBtn} onClick={save}>{editingId ? "Save" : "Add"}</button>
-          {editingId && <button style={qBtn} onClick={() => { setEditingId(null); setForm(empty); }}>✕</button>}
-        </div>
-      </div>
-      <div className="rounded-2xl border overflow-hidden" style={{ background: C.card, borderColor: C.border }}>
-        <table className="tw-table">
-          <thead><tr><th>Name</th><th>Email</th><th>Teaching Area</th><th>Courses</th><th>Slots</th><th></th></tr></thead>
-          <tbody>
-            {paged.map((f: any) => (
-              <tr key={f.id}>
-                <td className="font-medium" style={{ color: C.text }}>{f.name}</td>
-                <td style={{ color: C.sub }}>{f.email}</td>
-                <td className="text-xs" style={{ color: C.sub }}>{f.teachingArea || "—"}</td>
-                <td style={{ color: C.sub }}>{f._count?.courses || 0}</td>
-                <td style={{ color: C.sub }}>{f._count?.timetable || 0}</td>
-                <td><button style={{ ...qBtn, padding: "3px 10px", fontSize: 11 }} onClick={() => { setEditingId(f.id); setForm({ name: f.name, email: f.email, teachingArea: f.teachingArea || "" }); }}>✏️</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Pagination page={page} total={totalPages} onChange={setPage} />
+      {showForm && (
+        <Card
+          className={`mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)] ${editingId ? "border-[#531f75]" : ""}`}
+        >
+          <CardContent className="p-4">
+            <Err msg={error} />
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <FieldLabel text="Name" />
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <FieldLabel text="Email" />
+                <Input
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+              <div>
+                <FieldLabel text="Teaching Area" />
+                <Input
+                  value={form.teachingArea}
+                  onChange={(e) =>
+                    setForm({ ...form, teachingArea: e.target.value })
+                  }
+                  className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={save} className="">
+                {editingId ? "Save Changes" : "Add Faculty"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingId(null);
+                  setForm(empty);
+                  setShowForm(false);
+                  setError("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      <DataTable
+        columns={columns}
+        data={faculty}
+        searchPlaceholder="Search faculty..."
+      />
     </div>
   );
 }
 
 /* ─── Timetable Tab ────────────────────────────────────── */
 function TimetableTab() {
-  const [entries, setEntries]     = useState<TimetableEntry[]>([]);
-  const [divisions, setDivisions] = useState<Division[]>([]);
-  const [courses, setCourses]     = useState<Course[]>([]);
-  const [faculty, setFaculty]     = useState<Faculty[]>([]);
-  const [filterDiv, setFilterDiv] = useState("");
-  const [viewMode, setViewMode]   = useState<"list"|"calendar">("calendar");
-  const [weekOffset, setWeekOffset] = useState(0);
-  const todayStr = new Date().toISOString().split("T")[0];
-  const [form, setForm]           = useState({ divisionId: "", courseId: "", facultyId: "", date: todayStr, slotNumber: "1" });
-  const [error, setError]         = useState("");
+  return (
+    <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-[#531f75]/10 flex items-center justify-center">
+        <CalendarDaysIcon className="w-8 h-8 text-[#531f75]" />
+      </div>
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
+          Timetable has moved
+        </h2>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm">
+          Draft timetable creation, editing, and publishing are now in the
+          dedicated Timetable page. Use the sidebar link or the button below.
+        </p>
+      </div>
+      <a
+        href="/office/timetable"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#531f75] text-white text-sm font-medium hover:bg-[#531f75]/90 transition-colors"
+      >
+        <CalendarDaysIcon className="w-4 h-4" />
+        Go to Timetable
+      </a>
+    </div>
+  );
+}
 
-  const getWeekDates = (offset: number) => {
-    const ref = new Date(); ref.setDate(ref.getDate() + offset * 7);
-    const dow = ref.getDay(); const mon = new Date(ref); mon.setDate(ref.getDate() + (dow === 0 ? -6 : 1 - dow));
-    return Array.from({ length: 6 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return d.toISOString().split("T")[0]; });
-  };
-  const weekDates = getWeekDates(weekOffset);
-  const [weekStart, weekEnd] = [weekDates[0], weekDates[5]];
+/* ─── ERP Settings Tab ──────────────────────────────────── */
 
-  const fetchAll = useCallback(async () => {
-    const [tR, dR, cR, fR] = await Promise.all([fetch(`/api/admin/timetable?weekOf=${weekStart}`), fetch("/api/admin/divisions"), fetch("/api/admin/courses"), fetch("/api/admin/faculty")]);
-    setEntries(await tR.json()); setDivisions(await dR.json()); setCourses(await cR.json()); setFaculty(await fR.json());
-  }, [weekStart]);
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+interface ErpFaculty {
+  id: string;
+  name: string;
+  erpCode: string | null;
+}
+interface ErpRoom {
+  id: string;
+  name: string;
+  erpCode: string | null;
+}
+interface ErpDivision {
+  id: string;
+  name: string;
+  erpClassCode: string | null;
+}
+interface ErpGroup {
+  id: string;
+  name: string;
+  type: string;
+  erpGroupCode: string | null;
+  specialisation?: { name: string; code: string } | null;
+}
+interface ErpCourse {
+  id: string;
+  code: string;
+  name: string;
+  erpSubjectCode: string | null;
+}
+interface ErpSlot {
+  slotNumber: number;
+  label: string;
+  startTime: string;
+  endTime: string;
+  erpPeriodNumber: number | null;
+}
 
-  const addEntry    = async () => { setError(""); const res = await fetch("/api/admin/timetable", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ divisionId: parseInt(form.divisionId), courseId: parseInt(form.courseId), facultyId: form.facultyId ? parseInt(form.facultyId) : null, date: form.date, slotNumber: parseInt(form.slotNumber) }) }); if (res.ok) { setForm({ ...form, courseId: "", facultyId: "" }); fetchAll(); } else { setError((await res.json()).error); } };
-  const deleteEntry = async (id: number) => { await fetch(`/api/admin/timetable?id=${id}`, { method: "DELETE" }); fetchAll(); };
+function ErpSettingsTab() {
+  const [faculty, setFaculty] = useState<ErpFaculty[]>([]);
+  const [rooms, setRooms] = useState<ErpRoom[]>([]);
+  const [divisions, setDivisions] = useState<ErpDivision[]>([]);
+  const [groups, setGroups] = useState<ErpGroup[]>([]);
+  const [courses, setCourses] = useState<ErpCourse[]>([]);
+  const [slots, setSlots] = useState<ErpSlot[]>([]);
+  const [saving, setSaving] = useState<string | null>(null);
 
-  const selDiv      = divisions.find(d => d.id === parseInt(form.divisionId || filterDiv));
-  const filtCourses = selDiv ? courses.filter(c => selDiv.type === "core" ? c.type === "core" : (c.type === "specialisation" && c.specialisationId === selDiv.specialisationId)) : courses;
-  const filtEntries = filterDiv ? entries.filter(e => e.divisionId === parseInt(filterDiv)) : entries;
+  useEffect(() => {
+    fetch("/api/admin/erp-codes")
+      .then((r) => r.json())
+      .then((data) => {
+        setFaculty(data.faculty ?? []);
+        setRooms(data.rooms ?? []);
+        setDivisions(data.divisions ?? []);
+        setGroups(data.groups ?? []);
+        setCourses(data.courses ?? []);
+        setSlots(data.slots ?? []);
+      });
+  }, []);
 
-  // Filter faculties available based on the currently selected course
-  const selectedCourseObj = courses.find(c => c.id === parseInt(form.courseId));
-  const availableFaculties = selectedCourseObj && (selectedCourseObj as any).facultyCourses 
-    ? (selectedCourseObj as any).facultyCourses.map((fc: any) => fc.faculty)
-    : faculty; // Fallback to all if course not selected or mappings missing
+  async function patchErp(
+    type: string,
+    id: string | number,
+    fields: Record<string, unknown>,
+  ) {
+    const key = `${type}-${id}`;
+    setSaving(key);
+    try {
+      await fetch("/api/admin/erp-codes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, id, ...fields }),
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const inputCls =
+    "w-full px-2 py-1 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[#531f75]";
+  const thCls =
+    "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)]";
+  const tdCls = "px-3 py-2 text-sm border-b border-[var(--color-border)]";
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold" style={{ color: C.text }}>📅 Timetable</h2>
-        <div className="flex gap-1 p-1 rounded-lg" style={{ background: C.sec }}>
-          {(["calendar","list"] as const).map(m => (
-            <button key={m} style={{ ...qBtn, background: viewMode === m ? C.card : "transparent", border: viewMode === m ? `1px solid ${C.border}` : "1px solid transparent" }} onClick={() => setViewMode(m)}>
-              {m === "calendar" ? "📅 Calendar" : "📋 List"}
-            </button>
-          ))}
-        </div>
+    <div className="space-y-8">
+      {/* Slot period mapping */}
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
+          Slot → ERP Period Mapping
+        </h2>
+        <p className="text-sm text-[var(--color-text-muted)] mb-3">
+          Enter the ERP period number for each app slot (ERP counts breaks too,
+          so period numbers may skip).
+        </p>
+        <table className="w-full border border-[var(--color-border)] rounded-lg overflow-hidden text-sm">
+          <thead>
+            <tr>
+              <th className={thCls}>App Slot</th>
+              <th className={thCls}>Time</th>
+              <th className={thCls}>ERP Period #</th>
+            </tr>
+          </thead>
+          <tbody>
+            {slots.map((s) => (
+              <tr key={s.slotNumber}>
+                <td className={tdCls}>Slot {s.slotNumber}</td>
+                <td className={tdCls + " text-[var(--color-text-muted)]"}>
+                  {s.startTime} – {s.endTime}
+                </td>
+                <td className={tdCls}>
+                  <input
+                    type="number"
+                    min={1}
+                    defaultValue={s.erpPeriodNumber ?? ""}
+                    placeholder="e.g. 3"
+                    className={inputCls}
+                    style={{ width: 80 }}
+                    onBlur={(e) => {
+                      const v = e.target.value
+                        ? parseInt(e.target.value)
+                        : null;
+                      patchErp("slot", s.slotNumber, { erpPeriodNumber: v });
+                    }}
+                  />
+                  {saving === `slot-${s.slotNumber}` && (
+                    <span className="ml-2 text-xs text-[var(--color-text-muted)]">
+                      Saving…
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
-        <button style={qBtn} onClick={() => setWeekOffset(weekOffset - 1)}>◀ Prev</button>
-        <span className="text-sm font-semibold" style={{ color: C.text }}>{weekStart} — {weekEnd}</span>
-        <button style={qBtn} onClick={() => setWeekOffset(weekOffset + 1)}>Next ▶</button>
-        {weekOffset !== 0 && <button style={qBtn} onClick={() => setWeekOffset(0)}>Current Week</button>}
+      {/* Faculty codes */}
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
+          Faculty ERP Codes
+        </h2>
+        <table className="w-full border border-[var(--color-border)] rounded-lg overflow-hidden">
+          <thead>
+            <tr>
+              <th className={thCls}>Name</th>
+              <th className={thCls}>ERP Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {faculty.map((f) => (
+              <tr key={f.id}>
+                <td className={tdCls}>{f.name}</td>
+                <td className={tdCls}>
+                  <input
+                    type="text"
+                    defaultValue={f.erpCode ?? ""}
+                    placeholder="e.g. 305"
+                    className={inputCls}
+                    style={{ width: 120 }}
+                    onBlur={(e) =>
+                      patchErp("faculty", f.id, {
+                        erpCode: e.target.value || null,
+                      })
+                    }
+                  />
+                  {saving === `faculty-${f.id}` && (
+                    <span className="ml-2 text-xs text-[var(--color-text-muted)]">
+                      Saving…
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div style={card}>
-        <Label text="Add Timetable Entry" />
-        <Err msg={error} />
-        <div className="flex gap-2 flex-wrap items-end">
-          <select className={inputCls} style={{ width: 140 }} value={form.divisionId} onChange={e => { setForm({ ...form, divisionId: e.target.value, courseId: "", facultyId: "" }); setFilterDiv(e.target.value); }}><option value="">Division</option>{divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-          <select className={inputCls} style={{ width: 200 }} value={form.courseId} onChange={e => setForm({ ...form, courseId: e.target.value, facultyId: "" })}><option value="">Course</option>{filtCourses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}</select>
-          <select className={inputCls} style={{ width: 180 }} value={form.facultyId} onChange={e => setForm({ ...form, facultyId: e.target.value })}>
-            <option value="">Faculty (Required)</option>
-            {availableFaculties.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-          <input type="date" className={inputCls} style={{ width: 140 }} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
-          <select className={inputCls} style={{ width: 160 }} value={form.slotNumber} onChange={e => setForm({ ...form, slotNumber: e.target.value })}>{FIXED_SLOTS.map(s => <option key={s.slot} value={s.slot}>Slot {s.slot} ({s.start})</option>)}</select>
-          <button style={qBtn} onClick={addEntry} disabled={!form.divisionId || !form.courseId || !form.facultyId}>Add</button>
-        </div>
+      {/* Room codes */}
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
+          Room ERP Codes
+        </h2>
+        <table className="w-full border border-[var(--color-border)] rounded-lg overflow-hidden">
+          <thead>
+            <tr>
+              <th className={thCls}>Room</th>
+              <th className={thCls}>ERP Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rooms.map((r) => (
+              <tr key={r.id}>
+                <td className={tdCls}>{r.name}</td>
+                <td className={tdCls}>
+                  <input
+                    type="text"
+                    defaultValue={r.erpCode ?? ""}
+                    placeholder="e.g. RES0704"
+                    className={inputCls}
+                    style={{ width: 140 }}
+                    onBlur={(e) =>
+                      patchErp("room", r.id, {
+                        erpCode: e.target.value || null,
+                      })
+                    }
+                  />
+                  {saving === `room-${r.id}` && (
+                    <span className="ml-2 text-xs text-[var(--color-text-muted)]">
+                      Saving…
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="mb-3">
-        <select className={inputCls} style={{ width: 200 }} value={filterDiv} onChange={e => setFilterDiv(e.target.value)}><option value="">All Divisions (filter)</option>{divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+      {/* Division codes (core class codes) */}
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
+          Division ERP Class Codes
+        </h2>
+        <table className="w-full border border-[var(--color-border)] rounded-lg overflow-hidden">
+          <thead>
+            <tr>
+              <th className={thCls}>Division</th>
+              <th className={thCls}>ERP Class Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {divisions.map((d) => (
+              <tr key={d.id}>
+                <td className={tdCls}>{d.name}</td>
+                <td className={tdCls}>
+                  <input
+                    type="text"
+                    defaultValue={d.erpClassCode ?? ""}
+                    placeholder="e.g. CL007330"
+                    className={inputCls}
+                    style={{ width: 140 }}
+                    onBlur={(e) =>
+                      patchErp("division", d.id, {
+                        erpClassCode: e.target.value || null,
+                      })
+                    }
+                  />
+                  {saving === `division-${d.id}` && (
+                    <span className="ml-2 text-xs text-[var(--color-text-muted)]">
+                      Saving…
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {viewMode === "list" ? (
-        <div className="rounded-2xl border overflow-hidden" style={{ background: C.card, borderColor: C.border }}>
-          <table className="tw-table">
-            <thead><tr><th>Division</th><th>Date</th><th>Slot</th><th>Time</th><th>Course</th><th>Faculty</th><th></th></tr></thead>
-            <tbody>
-              {filtEntries.map(e => (
-                <tr key={e.id}>
-                  <td className="font-medium" style={{ color: C.text }}>{e.division.name}</td>
-                  <td style={{ color: C.sub }}>{e.date}</td>
-                  <td style={{ color: C.sub }}>{e.slotNumber}</td>
-                  <td style={{ color: C.sub }}>{e.startTime}–{e.endTime}</td>
-                  <td style={{ color: C.text }}>{e.course.code} — {e.course.name}</td>
-                  <td style={{ color: e.faculty ? C.text : C.muted }}>{e.faculty?.name || "—"}</td>
-                  <td>
-                    <button style={{ ...qBtn, padding: "3px 8px", fontSize: 11, color: e.isConducted ? C.muted : C.danger, opacity: e.isConducted ? 0.4 : 1, cursor: e.isConducted ? "not-allowed" : "pointer" }}
-                      onClick={() => !e.isConducted && deleteEntry(e.id)} disabled={e.isConducted}>🗑</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="text-xs overflow-x-auto" style={{ display: "grid", gridTemplateColumns: "80px repeat(6,1fr)", gap: 2 }}>
-          <div className="p-2 font-bold" style={{ color: C.muted }}>Slot</div>
-          {weekDates.map((date, i) => (
-            <div key={date} className="p-2 font-bold text-center rounded" style={{ background: date === todayStr ? C.accentG : "transparent", color: date === todayStr ? C.accentS : C.text }}>
-              {["Mon","Tue","Wed","Thu","Fri","Sat"][i]}<br /><span className="font-normal" style={{ fontSize: 11, color: C.muted }}>{date.slice(5)}</span>
-            </div>
-          ))}
-          {FIXED_SLOTS.map(slotDef => (
-            <React.Fragment key={slotDef.slot}>
-              <div className="flex flex-col justify-center" style={{ padding: "10px 6px", borderTop: `1px solid ${C.border}`, color: C.muted }}>
-                <div className="font-semibold">S{slotDef.slot}</div><div>{slotDef.label}</div>
-              </div>
-              {weekDates.map(date => {
-                const dayEntries = filtEntries.filter(e => e.date === date && e.slotNumber === slotDef.slot);
-                return (
-                  <div key={`${date}-${slotDef.slot}`} className="flex flex-col gap-1" style={{ padding: 4, borderTop: `1px solid ${C.border}` }}>
-                    {dayEntries.map(entry => (
-                      <div key={entry.id} className="rounded relative" style={{ padding: 6, background: C.sec }}>
-                        <div className="font-bold" style={{ fontSize: 11, color: C.text }}>{entry.course.code}</div>
-                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Div {entry.division.name}</div>
-                        {entry.faculty && <div style={{ fontSize: 10, color: C.accentS }}>{entry.faculty.name}</div>}
-                        {entry.isConducted
-                          ? <span className="absolute top-1 right-1.5 text-[10px]" style={{ color: C.success }} title="Conducted">✓</span>
-                          : <button onClick={() => deleteEntry(entry.id)} className="absolute top-1 right-1 bg-transparent border-0 cursor-pointer" style={{ fontSize: 12, color: C.danger }}>✕</button>}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
+      {/* Group codes (specialisation/elective group codes) */}
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
+          Group ERP Codes
+        </h2>
+        <table className="w-full border border-[var(--color-border)] rounded-lg overflow-hidden">
+          <thead>
+            <tr>
+              <th className={thCls}>Group</th>
+              <th className={thCls}>Type</th>
+              <th className={thCls}>ERP Group Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr key={g.id}>
+                <td className={tdCls}>
+                  {g.name}
+                  {g.specialisation ? ` (${g.specialisation.code})` : ""}
+                </td>
+                <td className={tdCls}>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {g.type}
+                  </Badge>
+                </td>
+                <td className={tdCls}>
+                  <input
+                    type="text"
+                    defaultValue={g.erpGroupCode ?? ""}
+                    placeholder="e.g. GTYPE0318"
+                    className={inputCls}
+                    style={{ width: 140 }}
+                    onBlur={(e) =>
+                      patchErp("group", g.id, {
+                        erpGroupCode: e.target.value || null,
+                      })
+                    }
+                  />
+                  {saving === `group-${g.id}` && (
+                    <span className="ml-2 text-xs text-[var(--color-text-muted)]">
+                      Saving…
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Course ERP subject codes */}
+      <div>
+        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
+          Course ERP Subject Codes
+        </h2>
+        <table className="w-full border border-[var(--color-border)] rounded-lg overflow-hidden">
+          <thead>
+            <tr>
+              <th className={thCls}>Code</th>
+              <th className={thCls}>Name</th>
+              <th className={thCls}>ERP Subject Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {courses.map((c) => (
+              <tr key={c.id}>
+                <td className={tdCls + " text-xs"}>{c.code}</td>
+                <td className={tdCls + " text-[var(--color-text-muted)]"}>
+                  {c.name}
+                </td>
+                <td className={tdCls}>
+                  <input
+                    type="text"
+                    defaultValue={c.erpSubjectCode ?? ""}
+                    placeholder="e.g. ABH (NCL503-PDM)"
+                    className={inputCls}
+                    style={{ width: 200 }}
+                    onBlur={(e) =>
+                      patchErp("course", c.id, {
+                        erpSubjectCode: e.target.value || null,
+                      })
+                    }
+                  />
+                  {saving === `course-${c.id}` && (
+                    <span className="ml-2 text-xs text-[var(--color-text-muted)]">
+                      Saving…
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
