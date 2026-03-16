@@ -45,7 +45,7 @@ export default function OfficeLayout({ children }: { children: React.ReactNode }
         </div>
       </div>
 
-      <main className="flex-1 md:ml-[260px] px-4 py-4 pt-18 md:px-10 md:py-8 md:pt-8">
+      <main className="flex-1 md:ml-[260px] px-4 py-4 pt-16 md:px-10 md:py-8 md:pt-8">
         {children}
       </main>
     </div>

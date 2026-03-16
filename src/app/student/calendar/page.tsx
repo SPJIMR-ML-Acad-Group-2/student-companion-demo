@@ -69,7 +69,7 @@ export default function StudentCalendar() {
       </div>
 
       {/* Calendar grid */}
-      <div className="text-xs overflow-x-auto" style={{ display: "grid", gridTemplateColumns: "80px repeat(6,1fr)", gap: 2 }}>
+      <div className="text-xs overflow-x-auto" style={{ display: "grid", gridTemplateColumns: "80px repeat(7,1fr)", gap: 2 }}>
         {/* Column headers */}
         <div className="p-2 font-bold text-[var(--color-text-muted)]">Slot</div>
         {data.calendar.map(day => (
@@ -107,13 +107,13 @@ export default function StudentCalendar() {
               const bgColor =
                 att?.status === "P"  ? "rgba(34,197,94,0.07)"  :
                 att?.status === "AB" ? "rgba(239,68,68,0.07)"  :
-                att?.status === "P#" ? "rgba(59,130,246,0.07)" : "varvar(--color-bg-secondary)";
+                att?.status === "P#" ? "rgba(59,130,246,0.07)" : "var(--color-bg-secondary)";
 
               return (
                 <div key={`${day.date}-${slotDef.slot}`}
                   className="p-2 border-t border-[var(--color-border)] rounded"
                   style={{
-                    background: entry.hasSession ? bgColor : "varvar(--color-bg-secondary)",
+                    background: entry.hasSession ? bgColor : "var(--color-bg-secondary)",
                     borderLeft: `3px solid var(${entry.courseType === "core" ? "--color-accent" : "--color-warning"})`,
                   }}>
                   <div className="font-bold text-[var(--color-text-primary)]">

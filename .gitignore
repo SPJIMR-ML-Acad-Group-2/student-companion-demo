@@ -48,3 +48,10 @@ next-env.d.ts
 
 # Prisma
 /prisma/migrations
+
+# Local tooling artifacts
+tmpclaude-*
+tsc_errors.txt
+test_prisma_client.ts
+dev.log
+.claude/settings.local.json
