@@ -4,121 +4,209 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
+  url = "file:./dev.db"
   // directUrl = env("DIRECT_URL")
 }
 
 // ─── Programmes & Batches ──────────────────────────────
 
 model Programme {
-  id       Int     @id @default(autoincrement())
+  id       String  @id @default(uuid())
   code     String  @unique // PGP, PGPBM — prefix for roll numbers
   name     String // PGDM, PGDM (BM)
   fullName String // Post Graduate Diploma in Management
   batches  Batch[]
-  Term     Term[]
 }
 
 model Batch {
-  id           Int        @id @default(autoincrement())
-  programmeId  Int
-  activeTermId Int?
+  id           String     @id @default(uuid())
+  programmeId  String
+  activeTermId String?
   name         String // "PGDM 2025-27"
   startYear    Int // 2025
   endYear      Int // 2027
   isActive     Boolean    @default(true)
   programme    Programme  @relation(fields: [programmeId], references: [id])
   activeTerm   Term?      @relation("ActiveTerm", fields: [activeTermId], references: [id])
-  students     User[]
-  divisions    Division[] @relation("BatchDivisions")
+  terms        Term[]     @relation("BatchTerms")
+  students     Student[]
+  divisions    Division[]
+  groups       Group[]
+  groupLinks    GroupBatch[]
 
   @@unique([programmeId, startYear, endYear])
 }
 
 model Term {
-  id          Int          @id @default(autoincrement())
-  programmeId Int
-  number      Int // 1, 2, 3...
-  name        String // "Term 1", "Term 3"
-  isActive    Boolean      @default(false) // Deprecated, use `activeTermId` on Batch
-  programme   Programme    @relation(fields: [programmeId], references: [id])
-  activeFor   Batch[]      @relation("ActiveTerm")
-  CourseTerm  CourseTerm[]
+  id       String       @id @default(uuid())
+  batchId  String // linked to batch (not programme)
+  number   Int // 1, 2, 3...
+  name     String // "Term 1", "Term 3"
+  startDate String? // YYYY-MM-DD
+  endDate   String? // YYYY-MM-DD
+  batch    Batch        @relation("BatchTerms", fields: [batchId], references: [id])
+  activeFor Batch[]     @relation("ActiveTerm")
+  courses  CourseTerm[]
+  timetable Timetable[]
+  draftTimetable DraftTimetable[]
+  divisionRoomAssignments DivisionTermRoom[]
+  groupRoomAssignments    GroupTermRoom[]
 
-  @@unique([programmeId, number])
+  @@unique([batchId, number])
 }
 
-// ─── Specialisations & Divisions ───────────────────────
+// ─── Specialisations ───────────────────────────────────
 
 model Specialisation {
-  id        Int        @id @default(autoincrement())
-  name      String // "Marketing", "Information Management & Analytics"
-  code      String     @unique // MKT, IM, FIN, OPS
-  divisions Division[] @relation("SpecDivisions")
-  students  User[]     @relation("StudentSpecialisation")
-  courses   Course[]   @relation("SpecCourses")
+  id       String    @id @default(uuid())
+  name     String // "Marketing", "Information Management & Analytics"
+  code     String    @unique // MKT, IM, FIN, OPS
+  groups   Group[]
+  students Student[]
+  courses  Course[]  @relation("SpecCourses")
 }
 
+// ─── Divisions (core only) ─────────────────────────────
+
 model Division {
-  id               Int             @id @default(autoincrement())
-  name             String // "A", "B", "MKT-A" — scoped by batch, NOT globally unique
-  type             String // "core" | "specialisation"
-  batchId          Int? // for core divisions — linked to batch
-  specialisationId Int?
-  batch            Batch?          @relation("BatchDivisions", fields: [batchId], references: [id])
-  specialisation   Specialisation? @relation("SpecDivisions", fields: [specialisationId], references: [id])
-  timetable        Timetable[]
-  coreStudents     User[]          @relation("CoreDivision")
-  specStudents     User[]          @relation("SpecDivision")
+  id             String           @id @default(uuid())
+  name           String // "A", "B", "C"
+  batchId        String
+  erpClassCode   String? // ERP class ID for core divisions, e.g. "CL007330"
+  defaultRoomId  String? // default classroom for this division
+  batch          Batch            @relation(fields: [batchId], references: [id])
+  defaultRoom    Room?            @relation("DivisionDefaultRoom", fields: [defaultRoomId], references: [id])
+  students       Student[]
+  courseDivisions CourseDivision[]
+  divisionTermRooms DivisionTermRoom[]
+  timetable      Timetable[]
+  draftTimetable DraftTimetable[]
 
   @@unique([name, batchId])
 }
 
-// ─── Users & Faculty ───────────────────────────────────
+// ─── Groups (spec/elective — flexible cohorts) ─────────
 
-model User {
-  id               Int             @id @default(autoincrement())
-  name             String
-  email            String          @unique
-  role             String // student | programme_office
-  rollNumber       String?         @unique // PGP-25-001, PGPBM-25-003
-  batchId          Int?
-  coreDivisionId   Int?
-  specialisationId Int?
-  specDivisionId   Int?
-  batch            Batch?          @relation(fields: [batchId], references: [id])
-  coreDivision     Division?       @relation("CoreDivision", fields: [coreDivisionId], references: [id])
-  specialisation   Specialisation? @relation("StudentSpecialisation", fields: [specialisationId], references: [id])
-  specDivision     Division?       @relation("SpecDivision", fields: [specDivisionId], references: [id])
-  attendance       Attendance[]
-  createdAt        DateTime        @default(now())
+model Group {
+  id               String           @id @default(uuid())
+  name             String // "MKT-A", "FIN-B", "COMMON_ELEC_1"
+  batchId          String
+  type             String // "specialisation" | "common_elective" | "open_elective"
+  specialisationId String? // only for specialisation groups
+  erpGroupCode     String? // ERP group code e.g. "GTYPE0318"
+  defaultRoomId    String? // default classroom for this group
+  batch            Batch            @relation(fields: [batchId], references: [id])
+  specialisation   Specialisation?  @relation(fields: [specialisationId], references: [id])
+  defaultRoom      Room?            @relation("GroupDefaultRoom", fields: [defaultRoomId], references: [id])
+  allowedBatches   GroupBatch[]
+  members          StudentGroup[]
+  courseGroups     CourseGroup[]
+  groupTermRooms   GroupTermRoom[]
+  timetable        Timetable[]
+  draftTimetable   DraftTimetable[]
+
+  @@unique([name, batchId])
 }
 
+model GroupBatch {
+  groupId String
+  batchId String
+  group   Group @relation(fields: [groupId], references: [id])
+  batch   Batch @relation(fields: [batchId], references: [id])
+
+  @@id([groupId, batchId])
+}
+
+model DivisionTermRoom {
+  id         String   @id @default(uuid())
+  divisionId String
+  termId     String
+  roomId     String
+  division   Division @relation(fields: [divisionId], references: [id])
+  term       Term     @relation(fields: [termId], references: [id])
+  room       Room     @relation("DivisionTermRoom", fields: [roomId], references: [id])
+
+  @@unique([divisionId, termId])
+}
+
+model GroupTermRoom {
+  id      String @id @default(uuid())
+  groupId String
+  termId  String
+  roomId  String
+  group   Group  @relation(fields: [groupId], references: [id])
+  term    Term   @relation(fields: [termId], references: [id])
+  room    Room   @relation("GroupTermRoom", fields: [roomId], references: [id])
+
+  @@unique([groupId, termId])
+}
+
+// Student ↔ Group M:N junction
+model StudentGroup {
+  studentId String
+  groupId   String
+  student   Student @relation(fields: [studentId], references: [id])
+  group     Group   @relation(fields: [groupId], references: [id])
+
+  @@id([studentId, groupId])
+}
+
+// ─── Users & Students ──────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      String // "student" | "programme_office"
+  createdAt DateTime @default(now())
+  student   Student?
+}
+
+model Student {
+  id               String          @id @default(uuid())
+  userId           String          @unique
+  rollNumber       String?         @unique
+  batchId          String
+  divisionId       String // core division (required)
+  specialisationId String? // chosen specialisation
+  createdAt        DateTime        @default(now())
+  user             User            @relation(fields: [userId], references: [id])
+  batch            Batch           @relation(fields: [batchId], references: [id])
+  division         Division        @relation(fields: [divisionId], references: [id])
+  specialisation   Specialisation? @relation(fields: [specialisationId], references: [id])
+  groups           StudentGroup[]
+  attendance       Attendance[]
+}
+
+// ─── Faculty ───────────────────────────────────────────
+
 model Faculty {
-  id           Int             @id @default(autoincrement())
-  name         String
-  email        String          @unique
-  teachingArea String? // e.g. "Finance and Accounting", "Marketing"
-  courses      FacultyCourse[]
-  timetable    Timetable[]
+  id             String           @id @default(uuid())
+  name           String
+  email          String           @unique
+  teachingArea   String? // e.g. "Finance and Accounting"
+  erpCode        String? // ERP numeric code, e.g. "305"
+  courses        FacultyCourse[]
+  timetable      Timetable[]
+  draftTimetable DraftTimetable[]
 }
 
 model FacultyCourse {
-  id        Int     @id @default(autoincrement())
-  facultyId Int
-  courseId  Int
+  id        String  @id @default(uuid())
+  facultyId String
+  courseId  String
   faculty   Faculty @relation(fields: [facultyId], references: [id])
   course    Course  @relation(fields: [courseId], references: [id])
 
   @@unique([facultyId, courseId])
 }
 
-// ─── Courses & Timetable ───────────────────────────────
+// ─── Courses & Terms ───────────────────────────────────
 
 model CourseTerm {
-  id       Int    @id @default(autoincrement())
-  courseId Int
-  termId   Int
+  id       String @id @default(uuid())
+  courseId String
+  termId   String
   course   Course @relation(fields: [courseId], references: [id])
   term     Term   @relation(fields: [termId], references: [id])
 
@@ -126,48 +214,135 @@ model CourseTerm {
 }
 
 model Course {
-  id               Int             @id @default(autoincrement())
-  code             String          @unique
+  id               String           @id @default(uuid())
+  code             String           @unique
   name             String
   totalSessions    Int
-  credits          Int             @default(3)
-  type             String          @default("core") // core | elective | specialisation
-  specialisationId Int?
-  specialisation   Specialisation? @relation("SpecCourses", fields: [specialisationId], references: [id])
+  credits          Int              @default(3)
+  type             String           @default("core") // "core" | "specialisation" | "minor" | "elective"
+  specialisationId String?
+  erpSubjectCode   String? // ERP subject code, e.g. "ABH (NCL503-PDM)"
+  specialisation   Specialisation?  @relation("SpecCourses", fields: [specialisationId], references: [id])
   courseTerms      CourseTerm[]
+  courseDivisions  CourseDivision[]
+  courseGroups     CourseGroup[]
   facultyCourses   FacultyCourse[]
   timetable        Timetable[]
+  draftTimetable   DraftTimetable[]
 }
 
+model CourseDivision {
+  courseId   String
+  divisionId String
+  course     Course   @relation(fields: [courseId], references: [id])
+  division   Division @relation(fields: [divisionId], references: [id])
+
+  @@id([courseId, divisionId])
+}
+
+// Course ↔ Group M:N junction (which groups are enrolled in a course)
+model CourseGroup {
+  courseId String
+  groupId  String
+  course   Course @relation(fields: [courseId], references: [id])
+  group    Group  @relation(fields: [groupId], references: [id])
+
+  @@id([courseId, groupId])
+}
+
+// ─── Timetable ─────────────────────────────────────────
+
 model Timetable {
-  id            Int          @id @default(autoincrement())
-  divisionId    Int
-  courseId      Int
-  facultyId     Int?
-  date          String // YYYY-MM-DD (specific date — timetable changes weekly)
-  slotNumber    Int // 1-8 (fixed slots)
-  startTime     String // from FIXED_SLOTS
-  endTime       String // from FIXED_SLOTS
+  id            String       @id @default(uuid())
+  divisionId    String? // null for group-based classes
+  groupId       String? // null for core division classes
+  termId        String?
+  courseId      String
+  facultyId     String?
+  roomId        String?
+  date          String // YYYY-MM-DD
+  slotNumber    Int // FK to Slot.slotNumber
   sessionNumber Int? // sequential session # for display
   isConducted   Boolean      @default(false)
-  division      Division     @relation(fields: [divisionId], references: [id])
+  visibility    String       @default("confirmed") // "confirmed" | "tentative" | "hidden"
+  activityType  String       @default("session") // "session" | "evaluation"
+  division      Division?    @relation(fields: [divisionId], references: [id])
+  group         Group?       @relation(fields: [groupId], references: [id])
+  term          Term?        @relation(fields: [termId], references: [id])
   course        Course       @relation(fields: [courseId], references: [id])
   faculty       Faculty?     @relation(fields: [facultyId], references: [id])
+  room          Room?        @relation(fields: [roomId], references: [id])
+  slot          Slot         @relation(fields: [slotNumber], references: [slotNumber])
   attendance    Attendance[]
 
   @@unique([divisionId, date, slotNumber])
+  @@unique([groupId, date, slotNumber])
+}
+
+// ─── Rooms ─────────────────────────────────────────────
+
+model Room {
+  id                  String           @id @default(uuid())
+  name                String           @unique // e.g. "LT-1", "Room 101"
+  erpCode             String? // ERP room code, e.g. "RES0704"
+  timetable           Timetable[]
+  draftTimetable      DraftTimetable[]
+  defaultForDivisions Division[]       @relation("DivisionDefaultRoom")
+  defaultForGroups    Group[]          @relation("GroupDefaultRoom")
+  defaultForDivisionTerms DivisionTermRoom[] @relation("DivisionTermRoom")
+  defaultForGroupTerms    GroupTermRoom[]    @relation("GroupTermRoom")
+}
+
+// ─── Draft Timetable ───────────────────────────────────
+
+model DraftTimetable {
+  id           String    @id @default(uuid())
+  divisionId   String? // null for group-based drafts
+  groupId      String? // null for core division drafts
+  termId       String?
+  courseId     String
+  facultyId    String?
+  roomId       String?
+  date         String // YYYY-MM-DD
+  slotNumber   Int // FK to Slot.slotNumber
+  activityType String    @default("session") // "session" | "evaluation"
+  isPublished  Boolean   @default(false) // true after publish; draft kept for reference
+  createdAt    DateTime  @default(now())
+  division     Division? @relation(fields: [divisionId], references: [id])
+  group        Group?    @relation(fields: [groupId], references: [id])
+  term         Term?     @relation(fields: [termId], references: [id])
+  course       Course    @relation(fields: [courseId], references: [id])
+  faculty      Faculty?  @relation(fields: [facultyId], references: [id])
+  room         Room?     @relation(fields: [roomId], references: [id])
+  slot         Slot      @relation(fields: [slotNumber], references: [slotNumber])
+
+  @@unique([divisionId, date, slotNumber])
+  @@unique([groupId, date, slotNumber])
+}
+
+// ─── ERP Slot Mapping ──────────────────────────────────
+
+model Slot {
+  slotNumber      Int              @id // 1-8 (natural key — stays as Int)
+  startTime       String
+  endTime         String
+  label           String
+  erpPeriodNumber Int? // ERP period sequence number (set once by admin)
+  timetable       Timetable[]
+  draftTimetable  DraftTimetable[]
 }
 
 // ─── Attendance ────────────────────────────────────────
 
 model Attendance {
-  id          Int       @id @default(autoincrement())
-  timetableId Int
-  studentId   Int
-  status      String // P | AB | LT | P# (sanctioned leave)
+  id          String    @id @default(uuid())
+  timetableId String
+  studentId   String // FK to Student (not User)
+  status      String // "P" | "AB" | "LT" | "P#" (sanctioned leave)
   swipeTime   String? // HH:mm:ss
+  remarks     String? // reason for manual status change
   timetable   Timetable @relation(fields: [timetableId], references: [id])
-  student     User      @relation(fields: [studentId], references: [id])
+  student     Student   @relation(fields: [studentId], references: [id])
   createdAt   DateTime  @default(now())
 
   @@unique([timetableId, studentId])

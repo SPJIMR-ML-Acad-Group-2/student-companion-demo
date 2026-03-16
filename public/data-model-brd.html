@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Companion — Data Model</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #f0f4f8;
+    padding: 40px;
+    min-height: 100vh;
+  }
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: #718096;
+    margin-bottom: 36px;
+  }
+
+  /* ── diagram canvas ── */
+  .canvas {
+    position: relative;
+    width: 1100px;
+    margin: 0 auto;
+    height: 780px;
+  }
+
+  /* ── entity card ── */
+  .entity {
+    position: absolute;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    padding: 10px 14px;
+    min-width: 130px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.10);
+  }
+  .entity-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .entity-attrs {
+    font-size: 10.5px;
+    color: #4a5568;
+    line-height: 1.55;
+  }
+
+  /* colour themes */
+  .blue   { background:#ebf8ff; border-color:#63b3ed; }
+  .blue .entity-title { color:#2b6cb0; }
+
+  .green  { background:#f0fff4; border-color:#68d391; }
+  .green .entity-title { color:#276749; }
+
+  .purple { background:#faf5ff; border-color:#b794f4; }
+  .purple .entity-title { color:#553c9a; }
+
+  .orange { background:#fffaf0; border-color:#f6ad55; }
+  .orange .entity-title { color:#c05621; }
+
+  .pink   { background:#fff5f7; border-color:#fc8181; }
+  .pink .entity-title { color:#9b2c2c; }
+
+  .teal   { background:#e6fffa; border-color:#4fd1c5; }
+  .teal .entity-title { color:#234e52; }
+
+  .gray   { background:#f7fafc; border-color:#a0aec0; }
+  .gray .entity-title { color:#2d3748; }
+
+  /* legend */
+  .legend {
+    width: 1100px;
+    margin: 24px auto 0;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: #4a5568;
+  }
+  .legend-dot {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    border: 2px solid transparent;
+  }
+
+  /* SVG connector layer */
+  svg.connectors {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+  line, path {
+    stroke-width: 1.8;
+    fill: none;
+  }
+  .rel-label {
+    font-size: 10px;
+    fill: #718096;
+  }
+</style>
+</head>
+<body>
+
+<h1>Student Companion — Conceptual Data Model</h1>
+<p class="subtitle">High-level business entities and their relationships &nbsp;|&nbsp; SPJIMR Timetable &amp; Attendance Platform</p>
+
+<div class="canvas" id="canvas">
+
+  <!-- SVG connector layer (rendered by JS) -->
+  <svg class="connectors" id="svg"></svg>
+
+  <!-- ── Academic Structure (blue) ── -->
+  <div class="entity blue" id="prog" style="left:30px; top:30px; width:148px;">
+    <div class="entity-title">Programme</div>
+    <div class="entity-attrs">Name &amp; Code<br>e.g. PGDM, PGDM(BM)</div>
+  </div>
+
+  <div class="entity blue" id="batch" style="left:230px; top:30px; width:148px;">
+    <div class="entity-title">Batch</div>
+    <div class="entity-attrs">Year range<br>Active Term<br>e.g. PGDM 2025-27</div>
+  </div>
+
+  <div class="entity blue" id="term" style="left:430px; top:30px; width:148px;">
+    <div class="entity-title">Term</div>
+    <div class="entity-attrs">Term number &amp; name<br>Start &amp; End dates<br>e.g. Term 1, Term 3</div>
+  </div>
+
+  <!-- ── People (green) ── -->
+  <div class="entity green" id="student" style="left:230px; top:220px; width:148px;">
+    <div class="entity-title">Student</div>
+    <div class="entity-attrs">Roll number<br>Division<br>Specialisation</div>
+  </div>
+
+  <div class="entity green" id="faculty" style="left:700px; top:220px; width:148px;">
+    <div class="entity-title">Faculty</div>
+    <div class="entity-attrs">Name &amp; Email<br>Teaching area<br>ERP code</div>
+  </div>
+
+  <!-- ── Groupings (purple) ── -->
+  <div class="entity purple" id="division" style="left:30px; top:220px; width:148px;">
+    <div class="entity-title">Division</div>
+    <div class="entity-attrs">Core section (A/B/C)<br>Permanent assignment<br>ERP class code</div>
+  </div>
+
+  <div class="entity purple" id="spec" style="left:30px; top:420px; width:148px;">
+    <div class="entity-title">Specialisation</div>
+    <div class="entity-attrs">Area of study<br>e.g. Marketing,<br>Finance, IMA, Ops</div>
+  </div>
+
+  <div class="entity purple" id="group" style="left:230px; top:420px; width:148px;">
+    <div class="entity-title">Learning Group</div>
+    <div class="entity-attrs">Flexible cohort<br>Specialisation / Elective<br>ERP group code</div>
+  </div>
+
+  <!-- ── Curriculum (orange) ── -->
+  <div class="entity orange" id="course" style="left:430px; top:220px; width:148px;">
+    <div class="entity-title">Course</div>
+    <div class="entity-attrs">Code &amp; Name<br>Type: Core / Spec / Elective<br>Credits &amp; Sessions</div>
+  </div>
+
+  <!-- ── Scheduling (teal) ── -->
+  <div class="entity teal" id="slot" style="left:700px; top:30px; width:148px;">
+    <div class="entity-title">Time Slot</div>
+    <div class="entity-attrs">Period number (1–8)<br>Start &amp; End time<br>Label</div>
+  </div>
+
+  <div class="entity teal" id="room" style="left:900px; top:30px; width:148px;">
+    <div class="entity-title">Room</div>
+    <div class="entity-attrs">Name<br>e.g. LT-1, Room 101<br>ERP room code</div>
+  </div>
+
+  <div class="entity teal" id="timetable" style="left:700px; top:420px; width:160px;">
+    <div class="entity-title">Class Session</div>
+    <div class="entity-attrs">Date &amp; Time Slot<br>Division or Group<br>Course, Faculty, Room<br>Status: Confirmed/Draft</div>
+  </div>
+
+  <!-- ── Attendance (pink) ── -->
+  <div class="entity pink" id="attendance" style="left:900px; top:420px; width:148px;">
+    <div class="entity-title">Attendance</div>
+    <div class="entity-attrs">Student + Session<br>Status: Present /Absent<br>Late / Sanctioned<br>Swipe time</div>
+  </div>
+
+</div><!-- /canvas -->
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#ebf8ff;border-color:#63b3ed;"></div> Academic Structure</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0fff4;border-color:#68d391;"></div> People</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#faf5ff;border-color:#b794f4;"></div> Groupings</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fffaf0;border-color:#f6ad55;"></div> Curriculum</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#e6fffa;border-color:#4fd1c5;"></div> Scheduling</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fff5f7;border-color:#fc8181;"></div> Attendance</div>
+</div>
+
+<script>
+// Helper: get centre of an element relative to canvas
+function centre(id) {
+  const canvas = document.getElementById('canvas');
+  const el = document.getElementById(id);
+  const cr = canvas.getBoundingClientRect();
+  const er = el.getBoundingClientRect();
+  return {
+    x: er.left - cr.left + er.width / 2,
+    y: er.top  - cr.top  + er.height / 2,
+    top:    er.top  - cr.top,
+    bottom: er.top  - cr.top  + er.height,
+    left:   er.left - cr.left,
+    right:  er.left - cr.left + er.width,
+  };
+}
+
+// Draw a line between two entity edges
+function connect(svg, fromId, toId, color, label, fromEdge, toEdge) {
+  const f = centre(fromId);
+  const t = centre(toId);
+
+  let x1, y1, x2, y2;
+  // pick best edge automatically if not specified
+  const fe = fromEdge || autoEdge(f, t, 'from');
+  const te = toEdge   || autoEdge(f, t, 'to');
+
+  [x1, y1] = edgePoint(fromId, fe);
+  [x2, y2] = edgePoint(toId,   te);
+
+  const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+  line.setAttribute('stroke', color || '#a0aec0');
+  line.setAttribute('stroke-dasharray', '5,3');
+  svg.appendChild(line);
+
+  if (label) {
+    const mx = (x1+x2)/2, my = (y1+y2)/2;
+    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x', mx+3); txt.setAttribute('y', my-4);
+    txt.setAttribute('class','rel-label');
+    txt.setAttribute('fill', color || '#718096');
+    txt.textContent = label;
+    svg.appendChild(txt);
+  }
+}
+
+function autoEdge(f, t, role) {
+  const dx = t.x - f.x, dy = t.y - f.y;
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'right' : 'left';
+  return dy > 0 ? 'bottom' : 'top';
+}
+
+function edgePoint(id, edge) {
+  const c = centre(id);
+  switch(edge) {
+    case 'top':    return [c.x, c.top];
+    case 'bottom': return [c.x, c.bottom];
+    case 'left':   return [c.left, c.y];
+    case 'right':  return [c.right, c.y];
+  }
+}
+
+window.addEventListener('load', () => {
+  const svg = document.getElementById('svg');
+  const C = (a,b,col,lbl,fe,te) => connect(svg,a,b,col,lbl,fe,te);
+
+  // Programme → Batch
+  C('prog','batch','#63b3ed','has batches','right','left');
+  // Batch → Term
+  C('batch','term','#63b3ed','has terms','right','left');
+  // Batch → Division
+  C('batch','division','#b794f4','has divisions','bottom','top');
+  // Batch → Student (via Division implied)
+  C('batch','student','#68d391','enrolls','bottom','top');
+  // Division → Student
+  C('division','student','#b794f4','contains','right','left');
+  // Student → Group (M:N)
+  C('student','group','#b794f4','belongs to','bottom','top');
+  // Group → Specialisation
+  C('group','spec','#b794f4','aligned to','left','right');
+  // Course → Term (via CourseTerm)
+  C('course','term','#f6ad55','offered in','top','bottom');
+  // Course → Division (core courses)
+  C('course','division','#f6ad55','taught to','left','right');
+  // Course → Group (spec/elec courses)
+  C('course','group','#f6ad55','taught to','bottom','top');
+  // Faculty → Course
+  C('faculty','course','#f6ad55','teaches','left','right');
+  // Timetable → Course
+  C('timetable','course','#4fd1c5','schedules','top','bottom');
+  // Timetable → Faculty
+  C('timetable','faculty','#4fd1c5','assigned to','top','bottom');
+  // Timetable → Room
+  C('timetable','room','#4fd1c5','held in','top','bottom');
+  // Timetable → Slot
+  C('timetable','slot','#4fd1c5','at slot','top','bottom');
+  // Timetable → Division/Group (indicated by label on class session box itself)
+  C('timetable','division','#4fd1c5','for division','left','bottom');
+  C('timetable','group','#4fd1c5','or group','left','right');
+  // Attendance → Timetable
+  C('attendance','timetable','#fc8181','recorded for','left','right');
+  // Attendance → Student
+  C('attendance','student','#fc8181','of student','top','right');
+  // Term → Timetable
+  C('term','timetable','#4fd1c5','in term','bottom','top');
+});
+</script>
+</body>
+</html>

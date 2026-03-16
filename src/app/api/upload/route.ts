@@ -36,133 +36,131 @@ export async function POST(req: NextRequest) {
     }
 
     // Get unique roll numbers
-    const rollNumbers = [...new Set(swipes.map(s => s.rollNumber))];
+    const rollNumbers = [...new Set(swipes.map((s) => s.rollNumber))];
 
-    // Lookup students with their divisions
-    const students = await prisma.user.findMany({
-      where: { rollNumber: { in: rollNumbers }, role: "student" },
+    // Lookup students (by rollNumber on Student model)
+    const students = await prisma.student.findMany({
+      where: { rollNumber: { in: rollNumbers } },
       include: {
-        coreDivision: true,
-        specDivision: true,
+        groups: { select: { groupId: true } },
       },
     });
-    const studentMap = new Map(students.map(s => [s.rollNumber!, s]));
+    const studentMap = new Map(students.map((s) => [s.rollNumber!, s]));
 
-    // Collect all division IDs (core + spec)
-    const allDivisionIds = new Set<number>();
+    // Collect all division IDs and group IDs from matched students
+    const allDivisionIds = new Set<string>();
+    const allGroupIds    = new Set<string>();
     for (const student of students) {
-      if (student.coreDivisionId) allDivisionIds.add(student.coreDivisionId);
-      if (student.specDivisionId) allDivisionIds.add(student.specDivisionId);
+      allDivisionIds.add(student.divisionId);
+      for (const sg of student.groups) allGroupIds.add(sg.groupId);
     }
 
-    // Get timetable entries for all relevant divisions
+    // Get timetable entries for all relevant divisions and groups
     const timetableEntries = await prisma.timetable.findMany({
-      where: { divisionId: { in: [...allDivisionIds] } },
-      include: { course: true, division: true },
-    });
-
-    // Issue #2 fix: fetch ALL students in timetable divisions (not just those who swiped)
-    // so that non-swiping students can be marked absent.
-    const allTimetableDivisionIds = [...new Set(timetableEntries.map(t => t.divisionId))];
-    const allDivisionStudents = await prisma.user.findMany({
       where: {
-        role: "student",
         OR: [
-          { coreDivisionId: { in: allTimetableDivisionIds } },
-          { specDivisionId: { in: allTimetableDivisionIds } },
+          ...(allDivisionIds.size > 0 ? [{ divisionId: { in: [...allDivisionIds] } }] : []),
+          ...(allGroupIds.size    > 0 ? [{ groupId:    { in: [...allGroupIds]    } }] : []),
         ],
       },
-      select: { id: true, coreDivisionId: true, specDivisionId: true },
+      include: { course: true, division: true, group: true, slot: true },
+    });
+
+    // Fetch ALL students who belong to the timetable divisions / groups
+    // (needed so non-swiping students can be marked absent)
+    const ttDivisionIds = [...new Set(timetableEntries.map((t) => t.divisionId).filter(Boolean) as string[])];
+    const ttGroupIds    = [...new Set(timetableEntries.map((t) => t.groupId   ).filter(Boolean) as string[])];
+
+    const allTimetableStudents = await prisma.student.findMany({
+      where: {
+        OR: [
+          ...(ttDivisionIds.length > 0 ? [{ divisionId: { in: ttDivisionIds } }] : []),
+          ...(ttGroupIds.length    > 0 ? [{
+            groups: { some: { groupId: { in: ttGroupIds } } },
+          }] : []),
+        ],
+      },
+      include: { groups: { select: { groupId: true } } },
     });
 
     const results = {
-      totalSwipes: swipes.length,
-      studentsMatched: students.length,
-      studentsNotFound: rollNumbers.length - students.length,
-      attendanceMarked: 0,
-      absentMarked: 0,
-      lateMarked: 0,
-      duplicatesSkipped: 0,
-      errors: [] as string[],
+      totalSwipes:         swipes.length,
+      studentsMatched:     students.length,
+      studentsNotFound:    rollNumbers.length - students.length,
+      attendanceMarked:    0,
+      absentMarked:        0,
+      lateMarked:          0,
+      duplicatesSkipped:   0,
+      errors:              [] as string[],
     };
 
-    // Get unique dates
-    const uniqueDates = [...new Set(swipes.map(s => s.date))];
+    const uniqueDates = [...new Set(swipes.map((s) => s.date))];
 
-    // Process each date
     for (const date of uniqueDates) {
-      const dateSwipes = swipes.filter(s => s.date === date);
-      // Get timetable slots for this day
-      const daySlots = timetableEntries.filter(t => t.date === date);
+      const dateSwipes = swipes.filter((s) => s.date === date);
+      const daySlots   = timetableEntries.filter((t) => t.date === date);
 
       for (const slot of daySlots) {
-        // Determine which students belong to this slot's division
         const divisionId = slot.divisionId;
-        const divisionType = slot.division.type; // "core" | "specialisation"
+        const groupId    = slot.groupId;
 
-        // All students in this division (includes non-swipers — needed for absent marking)
-        const allStudentsInDivision = allDivisionStudents.filter(s => {
-          if (divisionType === "core") return s.coreDivisionId === divisionId;
-          if (divisionType === "specialisation") return s.specDivisionId === divisionId;
-          return false;
-        });
-
-        if (allStudentsInDivision.length === 0) continue;
-
-        // Find timetable record
-        const timetableRecord = await prisma.timetable.findUnique({
-          where: {
-            divisionId_date_slotNumber: {
-              divisionId: divisionId,
-              date: date,
-              slotNumber: slot.slotNumber,
-            },
-          },
-        });
-
-        if (!timetableRecord) {
-          // If no timetable exists for this slot, we skip.
+        // Determine which students are in this slot's cohort
+        let studentsInCohort: typeof allTimetableStudents;
+        if (divisionId) {
+          studentsInCohort = allTimetableStudents.filter((s) => s.divisionId === divisionId);
+        } else if (groupId) {
+          studentsInCohort = allTimetableStudents.filter((s) =>
+            s.groups.some((sg) => sg.groupId === groupId)
+          );
+        } else {
           continue;
         }
 
+        if (studentsInCohort.length === 0) continue;
+
+        // Find the timetable record
+        const whereKey = divisionId
+          ? { divisionId_date_slotNumber: { divisionId, date, slotNumber: slot.slotNumber } }
+          : { groupId_date_slotNumber:    { groupId: groupId!, date, slotNumber: slot.slotNumber } };
+
+        const timetableRecord = await prisma.timetable.findUnique({ where: whereKey as Parameters<typeof prisma.timetable.findUnique>[0]["where"] });
+        if (!timetableRecord) continue;
+
         // Mark timetable as conducted
-        if (!(timetableRecord as any).isConducted) {
-          await (prisma.timetable.update as any)({
+        if (!timetableRecord.isConducted) {
+          await prisma.timetable.update({
             where: { id: timetableRecord.id },
-            data: { isConducted: true },
+            data:  { isConducted: true },
           });
         }
 
-        // Slot timing — punch must fall within [startTime, endTime] inclusive
-        const slotStartMinutes = timeToMinutes(slot.startTime);
-        const slotEndMinutes   = timeToMinutes(slot.endTime);
+        // Slot timing — punch must fall within [startTime, endTime]
+        const slotStartMinutes = timeToMinutes(slot.slot.startTime);
+        const slotEndMinutes   = timeToMinutes(slot.slot.endTime);
 
-        // Track students with a valid swipe for this session
-        const markedStudents = new Set<number>();
+        const markedStudents = new Set<string>();
 
-        // Match swipes to this slot
         for (const swipe of dateSwipes) {
           const student = studentMap.get(swipe.rollNumber);
           if (!student) continue;
 
-          const inThisDivision = divisionType === "core"
-            ? student.coreDivisionId === divisionId
-            : student.specDivisionId === divisionId;
-          if (!inThisDivision) continue;
+          // Check this student belongs to this cohort
+          const inCohort = divisionId
+            ? student.divisionId === divisionId
+            : student.groups.some((sg) => sg.groupId === groupId);
+          if (!inCohort) continue;
 
-          // Ignore punches outside this slot's time window (they belong to other slots)
           const swipeMinutes = timeToMinutes(swipe.timeStr);
           if (swipeMinutes < slotStartMinutes || swipeMinutes > slotEndMinutes) continue;
 
-          // Already marked present for this slot? Skip extra punches within the same window
           if (markedStudents.has(student.id)) {
             results.duplicatesSkipped++;
             continue;
           }
 
           try {
-            await (prisma.attendance.upsert as any)({
-              where: { timetableId_studentId: { timetableId: timetableRecord.id, studentId: student.id } },
+            await prisma.attendance.upsert({
+              where:  { timetableId_studentId: { timetableId: timetableRecord.id, studentId: student.id } },
               update: { status: "P", swipeTime: swipe.timeStr },
               create: { timetableId: timetableRecord.id, studentId: student.id, status: "P", swipeTime: swipe.timeStr },
             });
@@ -173,30 +171,18 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Edge case: If no one in the class punched the biometric for this slot, do NOT mark anyone absent.
-        // We leave the attendance records empty so it gets flagged on the UI.
+        // Mark absent only if at least one student swiped (otherwise slot had no readers)
         if (markedStudents.size > 0) {
-          // Mark absent students (students in this division who did NOT swipe today for this slot)
-          for (const student of allStudentsInDivision) {
+          for (const student of studentsInCohort) {
             if (markedStudents.has(student.id)) continue;
 
-            const existing = await (prisma.attendance.findUnique as any)({
-              where: {
-                timetableId_studentId: {
-                  timetableId: timetableRecord.id,
-                  studentId: student.id,
-                },
-              },
+            const existing = await prisma.attendance.findUnique({
+              where: { timetableId_studentId: { timetableId: timetableRecord.id, studentId: student.id } },
             });
 
             if (!existing) {
-              await (prisma.attendance.create as any)({
-                data: {
-                  timetableId: timetableRecord.id,
-                  studentId: student.id,
-                  status: "AB",
-                  swipeTime: null,
-                },
+              await prisma.attendance.create({
+                data: { timetableId: timetableRecord.id, studentId: student.id, status: "AB", swipeTime: null },
               });
               results.absentMarked++;
             }
@@ -205,10 +191,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      results,
-    });
+    return NextResponse.json({ success: true, results });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

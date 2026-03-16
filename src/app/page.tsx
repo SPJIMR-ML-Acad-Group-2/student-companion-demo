@@ -2,21 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-
-const C = {
-  bg:      "var(--color-bg-primary)",
-  card:    "var(--color-bg-card)",
-  sec:     "var(--color-bg-secondary)",
-  border:  "var(--color-border)",
-  text:    "var(--color-text-primary)",
-  muted:   "var(--color-text-muted)",
-  sub:     "var(--color-text-secondary)",
-  accent:  "var(--color-accent)",
-  accentS: "var(--color-accent-sec)",
-  accentG: "var(--color-accent-glow)",
-  danger:  "var(--color-danger)",
-  dangerB: "var(--color-danger-bg)",
-};
+import { Spinner } from "@/components/ui/spinner";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { BookOpenIcon, BuildingLibraryIcon, AcademicCapIcon } from "@heroicons/react/24/outline";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
@@ -41,91 +32,97 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4" style={{ background: C.bg }}>
+    <div className="flex items-center justify-center min-h-screen px-4 bg-[var(--color-bg-primary)]">
       <div className="w-full max-w-md">
 
         {/* Card */}
-        <div className="rounded-2xl p-8" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <div className="rounded-2xl p-8 bg-[var(--color-bg-card)] border border-[var(--color-border)]">
 
           {/* Logo */}
-          <div className="flex flex-col items-center mb-6">
+          <div className="flex flex-col items-center mb-8">
             <div
-              className="flex items-center justify-center text-3xl mb-4"
-              style={{ width: 64, height: 64, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: 16 }}
+              className="flex items-center justify-center mb-4 w-16 h-16 rounded-2xl"
+              style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
             >
-              📚
+              <BookOpenIcon className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-center" style={{ color: C.text }}>Classroom Companion</h1>
-            <p className="text-sm text-center mt-2" style={{ color: C.sub }}>
+            <h1 className="text-2xl font-bold text-center text-[var(--color-text-primary)]">Classroom Companion</h1>
+            <p className="text-sm text-center mt-2 text-[var(--color-text-secondary)]">
               Automated attendance tracking &amp; analytics for SPJIMR.<br />
               Sign in with your Roll Number or Staff Email.
             </p>
           </div>
 
           {/* Input */}
-          <div className="mb-4">
-            <label className="block text-xs font-semibold uppercase tracking-widest mb-2" htmlFor="identifier" style={{ color: C.muted }}>
+          <div className="mb-4 space-y-1.5">
+            <Label htmlFor="identifier" className="text-[var(--color-text-muted)] uppercase tracking-widest text-xs">
               Roll Number / Email
-            </label>
-            <input
+            </Label>
+            <Input
               id="identifier"
               type="text"
-              className="tw-input"
               placeholder="e.g. PGP-25-001 or admin@spjimr.org"
               value={identifier}
               onChange={e => setIdentifier(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleLogin()}
               disabled={loading}
+              className="bg-[var(--color-bg-secondary)] border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus-visible:ring-[#531f75]"
             />
           </div>
 
           {/* Submit */}
-          <button
+          <Button
             onClick={() => handleLogin()}
             disabled={loading}
-            className="w-full py-3 rounded-lg font-semibold text-sm text-white cursor-pointer transition-opacity flex items-center justify-center gap-2"
-            style={{ background: "linear-gradient(135deg,#6366f1,#7c3aed)", border: "none", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}
+            className="w-full text-white font-semibold"
+            style={{ background: loading ? "#531f7599" : "linear-gradient(135deg, #531f75, #8b5cf6)" }}
           >
             {loading
-              ? <><div className="rounded-full border-2 animate-spin shrink-0" style={{ width: 16, height: 16, borderColor: "rgba(255,255,255,0.3)", borderTopColor: "white" }} /> Signing in…</>
+              ? <><Spinner size={16} /> Signing in...</>
               : "Sign In →"
             }
-          </button>
+          </Button>
 
           {/* Error */}
           {error && (
-            <div className="mt-3 px-4 py-3 rounded-lg text-sm" style={{ background: C.dangerB, color: C.danger }}>
+            <div className="mt-3 px-4 py-3 rounded-lg text-sm bg-[var(--color-danger-bg)] text-[var(--color-danger)]">
               {error}
             </div>
           )}
 
           {/* Quick Login */}
-          <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${C.border}` }}>
-            <div className="text-xs font-semibold uppercase tracking-widest mb-3 text-center" style={{ color: C.muted }}>
+          <div className="mt-6 pt-5 border-t border-[var(--color-border)]">
+            <div className="text-xs font-semibold uppercase tracking-widest mb-3 text-center text-[var(--color-text-muted)]">
               Quick Demo Login
             </div>
             <div className="flex flex-col gap-2">
               {[
-                { label: "🏫 Programme Office",       id: "office@spjimr.org" },
-                { label: "🎓 Student — PGDM A (Fin)", id: "PGP-25-001"        },
-                { label: "🎓 Student — PGDM A (Mkt)", id: "PGP-25-004"        },
-                { label: "🎓 Student — PGDM B (IM)",  id: "PGP-25-011"        },
-                { label: "🎓 Student — BM D (Fin)",   id: "PGPBM-25-001"      },
-              ].map(({ label, id }) => (
+                { label: "Programme Office",         sub: "office@spjimr.org",  Icon: BuildingLibraryIcon, id: "office@spjimr.org" },
+                { label: "Student — PGDM A (Fin)",   sub: "PGP-25-001",         Icon: AcademicCapIcon,     id: "PGP-25-001"        },
+                { label: "Student — PGDM A (Mkt)",   sub: "PGP-25-004",         Icon: AcademicCapIcon,     id: "PGP-25-004"        },
+                { label: "Student — PGDM B (IM)",    sub: "PGP-25-011",         Icon: AcademicCapIcon,     id: "PGP-25-011"        },
+                { label: "Student — BM D (Fin)",     sub: "PGPBM-25-001",       Icon: AcademicCapIcon,     id: "PGPBM-25-001"      },
+              ].map(({ label, sub, Icon, id }) => (
                 <button
                   key={id}
                   onClick={() => handleLogin(id)}
-                  className="w-full px-4 py-2.5 rounded-lg text-sm text-left cursor-pointer transition-colors"
-                  style={{ background: C.sec, border: `1px solid ${C.border}`, color: C.sub, fontFamily: "inherit" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = C.accent; (e.currentTarget as HTMLElement).style.color = C.text; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.color = C.sub; }}
+                  className="w-full px-4 py-2.5 rounded-lg text-sm text-left cursor-pointer transition-colors flex items-center gap-3 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[#531f75] hover:text-[var(--color-text-primary)]"
                 >
-                  {label}
+                  <Icon className="w-4 h-4 shrink-0 text-[#531f75]" />
+                  <span>
+                    <span className="font-medium block">{label}</span>
+                    <span className="text-xs text-[var(--color-text-muted)]">{sub}</span>
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
+        </div>
+
+        {/* Theme toggle */}
+        <div className="mt-4 flex justify-center">
+          <ThemeToggle />
         </div>
       </div>
     </div>
