@@ -30,7 +30,6 @@ export async function processUploadJob(
     studentsNotFound: 0,
     attendanceMarked: 0,
     absentMarked: 0,
-    lateMarked: 0,
     duplicatesSkipped: 0,
     errors: [] as string[],
   };
@@ -255,7 +254,6 @@ export async function processUploadJob(
         studentsNotFound: results.studentsNotFound,
         attendanceMarked: results.attendanceMarked,
         absentMarked: results.absentMarked,
-        lateMarked: results.lateMarked,
         duplicatesSkipped: results.duplicatesSkipped,
         errors: JSON.stringify(results.errors),
         completedAt: new Date(),

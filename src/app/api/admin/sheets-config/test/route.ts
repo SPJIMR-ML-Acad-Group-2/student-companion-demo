@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { readRange } from "@/lib/googleSheets";
+import { getFirstSheetTitle, readRange } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +22,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Test with Sheet1!A1:C2 — just verifies credentials and spreadsheet access
-    const rows = await readRange(config.spreadsheetId, "Sheet1!A1:C2");
+    // Discover the first sheet title so we never hard-code "Sheet1"
+    const sheetTitle = await getFirstSheetTitle(config.spreadsheetId);
+    const rows = await readRange(config.spreadsheetId, `${sheetTitle}!A1:C2`);
     const headerPreview = rows[0]?.slice(0, 3).map(String) ?? [];
-    return NextResponse.json({ ok: true, headerPreview });
+    return NextResponse.json({ ok: true, sheetTitle, headerPreview });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: msg }, { status: 502 });

@@ -65,6 +65,7 @@ export async function syncAttendanceRecord(attendanceId: string): Promise<void> 
   const config = await findConfig(
     att.timetable.divisionId ?? undefined,
     att.timetable.groupId ?? undefined,
+    att.timetable.termId ?? undefined,
   );
 
   if (!config) {
@@ -127,6 +128,23 @@ export async function triggerBatchSync(timetableIds: string[]): Promise<void> {
   });
   if (records.length === 0) return;
 
+  // Preload all active configs into a lookup map — avoids N+1 queries in the loop below.
+  // Key: `div_{divisionId}:{termId}` or `grp_{groupId}:{termId}`
+  const allConfigs = await prisma.googleSheetsConfig.findMany({
+    where: { isActive: true },
+  });
+  const configMap = new Map(
+    allConfigs.map((c) => {
+      const cohortKey = c.divisionId ? `div_${c.divisionId}` : `grp_${c.groupId}`;
+      return [`${cohortKey}:${c.termId}`, c];
+    }),
+  );
+  const lookupConfig = (divisionId?: string, groupId?: string, termId?: string) => {
+    if (divisionId) return configMap.get(`div_${divisionId}:${termId ?? ''}`) ?? null;
+    if (groupId)    return configMap.get(`grp_${groupId}:${termId ?? ''}`) ?? null;
+    return null;
+  };
+
   // Group by (spreadsheetId + sheetTabName) — one read+write per tab
   type TabKey = string; // `${spreadsheetId}::${sheetTabName}`
   const groups = new Map<TabKey, {
@@ -143,9 +161,10 @@ export async function triggerBatchSync(timetableIds: string[]): Promise<void> {
         'Course sheetsTabName not configured');
       continue;
     }
-    const config = await findConfig(
+    const config = lookupConfig(
       att.timetable.divisionId ?? undefined,
       att.timetable.groupId ?? undefined,
+      att.timetable.termId ?? undefined,
     );
     if (!config) {
       await upsertLog(att.id, att.timetableId, att.studentId, null, 'skipped');
@@ -274,18 +293,22 @@ export async function syncPendingRecords(
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**
- * Find the GoogleSheetsConfig for a cohort (division or group).
- * One config per division/group — covers all courses in that workbook.
+ * Find the GoogleSheetsConfig for a cohort (division or group) scoped to a term.
+ * If termId is provided it is used as an exact filter; without it we fall back to
+ * the most-recently-created active config for the cohort so single-config setups
+ * still work.
  */
-async function findConfig(divisionId?: string, groupId?: string) {
+async function findConfig(divisionId?: string, groupId?: string, termId?: string) {
   if (divisionId) {
     return prisma.googleSheetsConfig.findFirst({
-      where: { divisionId, isActive: true },
+      where: { divisionId, isActive: true, ...(termId ? { termId } : {}) },
+      orderBy: { createdAt: "desc" },
     });
   }
   if (groupId) {
     return prisma.googleSheetsConfig.findFirst({
-      where: { groupId, isActive: true },
+      where: { groupId, isActive: true, ...(termId ? { termId } : {}) },
+      orderBy: { createdAt: "desc" },
     });
   }
   return null;

@@ -95,13 +95,21 @@ export async function GET(req: NextRequest) {
       trendStartDate = term?.startDate ?? undefined;
       trendEndDate = term?.endDate ?? undefined;
     }
+    // Count only present-ish statuses (P = present, LT = late) so the trend
+    // reflects real attendance and not merely "a row exists for that student".
     const trendSessions = await prisma.timetable.findMany({
       where: {
         isConducted: true,
         ...(trendStartDate ? { date: { gte: trendStartDate } } : {}),
         ...(trendEndDate ? { date: { lte: trendEndDate } } : {}),
       },
-      select: { date: true, divisionId: true, groupId: true, _count: { select: { attendance: true } } },
+      select: {
+        date: true,
+        divisionId: true,
+        groupId: true,
+        _count: { select: { attendance: true } },                // total enrolled (denominator)
+        attendance: { where: { status: { in: ["P", "LT"] } }, select: { id: true } }, // present (numerator)
+      },
       orderBy: { date: "asc" },
     });
     const trendMap = new Map<string, { total: number; expected: number }>();
@@ -112,7 +120,7 @@ export async function GET(req: NextRequest) {
         : s.groupId ? (groupStudentMap.get(s.groupId) ?? 0) : 0;
       if (expected === 0) continue;
       const existing = trendMap.get(dateStr) ?? { total: 0, expected: 0 };
-      trendMap.set(dateStr, { total: existing.total + s._count.attendance, expected: existing.expected + expected });
+      trendMap.set(dateStr, { total: existing.total + s.attendance.length, expected: existing.expected + expected });
     }
     const attendanceTrend = Array.from(trendMap.entries())
       .map(([date, { total, expected }]) => ({ date, avgPct: Math.round((total / expected) * 100) }))

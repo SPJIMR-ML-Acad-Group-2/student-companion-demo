@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { readRange } from "@/lib/googleSheets";
+import { getFirstSheetTitle, readRange } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +38,12 @@ export async function POST(req: NextRequest) {
   if (!divisionId && !groupId) {
     return NextResponse.json(
       { error: "Either divisionId or groupId is required" },
+      { status: 400 },
+    );
+  }
+  if (divisionId && groupId) {
+    return NextResponse.json(
+      { error: "Provide either divisionId or groupId, not both" },
       { status: 400 },
     );
   }
@@ -82,12 +88,15 @@ export async function PATCH(req: NextRequest) {
   };
 
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+  if (termId !== undefined && !termId.trim()) {
+    return NextResponse.json({ error: "termId cannot be empty" }, { status: 400 });
+  }
 
   const config = await prisma.googleSheetsConfig.update({
     where: { id },
     data: {
       ...(spreadsheetId !== undefined ? { spreadsheetId: spreadsheetId.trim() } : {}),
-      ...(termId !== undefined ? { termId: termId ?? null } : {}),
+      ...(termId !== undefined ? { termId: termId.trim() } : {}),
       ...(isActive !== undefined ? { isActive } : {}),
     },
     include: includeRelations,
@@ -125,8 +134,9 @@ export async function HEAD(req: NextRequest) {
   if (!config) return new NextResponse(null, { status: 404 });
 
   try {
-    // Test with Sheet1 tab — just verifies credentials and spreadsheet access
-    await readRange(config.spreadsheetId, "Sheet1!A1:B2");
+    // Discover the first sheet title so we never hard-code "Sheet1"
+    const sheetTitle = await getFirstSheetTitle(config.spreadsheetId);
+    await readRange(config.spreadsheetId, `${sheetTitle}!A1:B2`);
     return new NextResponse(null, { status: 200 });
   } catch {
     return new NextResponse(null, { status: 502 });

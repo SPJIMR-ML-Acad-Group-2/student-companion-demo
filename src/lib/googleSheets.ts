@@ -71,6 +71,21 @@ export async function batchWriteCells(
 }
 
 /**
+ * Return the title of the first sheet in a spreadsheet.
+ * Used by the connection-test endpoint so we never hard-code "Sheet1".
+ */
+export async function getFirstSheetTitle(spreadsheetId: string): Promise<string> {
+  const sheets = getSheetsClient();
+  const res = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets.properties.title',
+  });
+  const title = res.data.sheets?.[0]?.properties?.title;
+  if (!title) throw new Error('No sheets found in the spreadsheet');
+  return title;
+}
+
+/**
  * Convert an ISO date string to the format used in sheet column headers.
  * "2026-01-08"  →  "8-Jan-2026"
  * "2026-12-25"  →  "25-Dec-2026"

@@ -549,7 +549,7 @@ export default function OfficeAttendance() {
     const status = editingStatus[studentId];
     if (!status || status === "None") return;
     const remarks = editingRemarks[studentId] || null;
-    await fetch("/api/admin/attendance", {
+    const res = await fetch("/api/admin/attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -559,6 +559,11 @@ export default function OfficeAttendance() {
         remarks,
       }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast.error((err as { error?: string }).error ?? "Failed to save attendance");
+      return;
+    }
     setAttRecords((prev) =>
       prev.map((r) =>
         r.studentId === studentId ? { ...r, status, remarks } : r,
@@ -582,9 +587,9 @@ export default function OfficeAttendance() {
       toast.info("No unsaved changes");
       return;
     }
-    await Promise.all(
-      dirty.map((r) =>
-        fetch("/api/admin/attendance", {
+    const results = await Promise.all(
+      dirty.map(async (r) => {
+        const res = await fetch("/api/admin/attendance", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -593,18 +598,33 @@ export default function OfficeAttendance() {
             status: editingStatus[r.studentId] ?? r.status,
             remarks: editingRemarks[r.studentId] || null,
           }),
-        }),
-      ),
+        });
+        return { studentId: r.studentId, ok: res.ok };
+      }),
     );
-    setAttRecords((prev) =>
-      prev.map((r) => ({
-        ...r,
-        status: editingStatus[r.studentId] ?? r.status,
-        remarks: editingRemarks[r.studentId] ?? (r.remarks || null),
-      })),
-    );
-    toast.success(`Saved ${dirty.length} record${dirty.length > 1 ? "s" : ""}`);
-    fetchCalendar(weekOffset);
+    const succeeded = results.filter((r) => r.ok).map((r) => r.studentId);
+    const failedCount = results.length - succeeded.length;
+    if (succeeded.length > 0) {
+      const successSet = new Set(succeeded);
+      setAttRecords((prev) =>
+        prev.map((r) =>
+          successSet.has(r.studentId)
+            ? {
+                ...r,
+                status: editingStatus[r.studentId] ?? r.status,
+                remarks: editingRemarks[r.studentId] ?? (r.remarks || null),
+              }
+            : r,
+        ),
+      );
+      fetchCalendar(weekOffset);
+    }
+    if (failedCount > 0) {
+      toast.error(`${failedCount} record${failedCount > 1 ? "s" : ""} failed to save`);
+    }
+    if (succeeded.length > 0) {
+      toast.success(`Saved ${succeeded.length} record${succeeded.length > 1 ? "s" : ""}`);
+    }
   };
 
   const downloadReport = async () => {

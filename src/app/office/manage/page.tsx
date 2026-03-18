@@ -4335,7 +4335,6 @@ function SheetsSyncTab() {
                                 <Select value={editTermId} onValueChange={setEditTermId}>
                                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select term" /></SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">— No term —</SelectItem>
                                     {cfgTermsForBatch.map(t => (
                                       <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                                     ))}
