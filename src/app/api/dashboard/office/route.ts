@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const cookieStore = await cookies();
     const session = cookieStore.get("session");
@@ -13,6 +13,8 @@ export async function GET() {
     const user = JSON.parse(session.value);
     if (user.role !== "programme_office")
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const termId = req.nextUrl.searchParams.get("termId") || null;
 
     const programmes = await prisma.programme.findMany({
       include: {
@@ -29,9 +31,10 @@ export async function GET() {
     const programmeSummaries = await Promise.all(
       programmes.flatMap((prog) =>
         prog.batches.map(async (batch) => {
+          const effectiveTermId = termId ?? batch.activeTerm?.id;
           const divSummaries = await buildDivisionSummaries(
             batch.divisions,
-            batch.activeTerm?.id,
+            effectiveTermId,
           );
           return {
             programmeId: prog.id,
@@ -61,7 +64,7 @@ export async function GET() {
     });
     const specSummaries = await Promise.all(
       specialisations.map(async (spec) => {
-        const groupSummaries = await buildGroupSummaries(spec.groups, null);
+        const groupSummaries = await buildGroupSummaries(spec.groups, termId);
         return {
           id: spec.id,
           name: spec.name,
@@ -71,41 +74,54 @@ export async function GET() {
       }),
     );
 
-    const recentSessions = await prisma.timetable.findMany({
-      where: { isConducted: true },
-      orderBy: [{ date: "desc" }, { slotNumber: "asc" }],
-      take: 15,
-      include: {
-        course: true,
-        division: { include: { batch: { include: { programme: true } } } },
-        group: {
-          include: {
-            specialisation: true,
-            batch: { include: { programme: true } },
-          },
-        },
-        _count: { select: { attendance: true } },
+    // Build student-count lookup maps for trend computation
+    const divStudentMap = new Map<string, number>();
+    for (const prog of programmeSummaries) {
+      for (const div of prog.divisions) divStudentMap.set(div.divisionId, div.studentCount);
+    }
+    const groupStudentMap = new Map<string, number>();
+    for (const spec of specSummaries) {
+      for (const grp of spec.groups) groupStudentMap.set(grp.groupId, grp.studentCount);
+    }
+
+    // Attendance trend: conducted sessions grouped by date, filtered by term date range if termId given
+    let trendStartDate: string | undefined;
+    let trendEndDate: string | undefined;
+    if (termId) {
+      const term = await prisma.term.findUnique({
+        where: { id: termId },
+        select: { startDate: true, endDate: true },
+      });
+      trendStartDate = term?.startDate ?? undefined;
+      trendEndDate = term?.endDate ?? undefined;
+    }
+    const trendSessions = await prisma.timetable.findMany({
+      where: {
+        isConducted: true,
+        ...(trendStartDate ? { date: { gte: trendStartDate } } : {}),
+        ...(trendEndDate ? { date: { lte: trendEndDate } } : {}),
       },
+      select: { date: true, divisionId: true, groupId: true, _count: { select: { attendance: true } } },
+      orderBy: { date: "asc" },
     });
+    const trendMap = new Map<string, { total: number; expected: number }>();
+    for (const s of trendSessions) {
+      const d = s.date as unknown;
+      const dateStr = (d instanceof Date ? d : new Date(String(d))).toISOString().slice(0, 10);
+      const expected = s.divisionId ? (divStudentMap.get(s.divisionId) ?? 0)
+        : s.groupId ? (groupStudentMap.get(s.groupId) ?? 0) : 0;
+      if (expected === 0) continue;
+      const existing = trendMap.get(dateStr) ?? { total: 0, expected: 0 };
+      trendMap.set(dateStr, { total: existing.total + s._count.attendance, expected: existing.expected + expected });
+    }
+    const attendanceTrend = Array.from(trendMap.entries())
+      .map(([date, { total, expected }]) => ({ date, avgPct: Math.round((total / expected) * 100) }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     return NextResponse.json({
       programmes: programmeSummaries,
       specialisations: specSummaries,
-      recentSessions: recentSessions.map((s) => ({
-        id: s.id,
-        date: s.date,
-        slot: s.slotNumber,
-        course: s.course.code,
-        courseName: s.course.name,
-        divisionOrGroup: s.division?.name ?? s.group?.name ?? "",
-        type: s.division ? "core" : "specialisation",
-        programme:
-          s.division?.batch?.programme?.name ??
-          s.group?.batch?.programme?.name ??
-          s.group?.specialisation?.name ??
-          "",
-        attendanceCount: s._count.attendance,
-      })),
+      attendanceTrend,
     });
   } catch (error) {
     console.error("Office dashboard error:", error);

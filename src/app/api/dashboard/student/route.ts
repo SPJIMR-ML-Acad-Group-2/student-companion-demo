@@ -128,7 +128,7 @@ export async function GET(req: Request) {
         const percentage =
           totalConducted > 0
             ? Math.round(((present + late) / totalConducted) * 100)
-            : 100;
+            : 0;
         const penalty = getPenaltyInfo(course.credits, absent, late);
 
         const log = timetableSlots.map((t) => {

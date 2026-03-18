@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { syncAttendanceRecord } from "@/lib/attendanceSync";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,11 @@ export async function POST(req: NextRequest) {
       where: { id: sessionId },
       data: { isConducted: true },
     });
+
+    // Fire-and-forget Google Sheets sync — never blocks the HTTP response
+    syncAttendanceRecord(att.id).catch((err) =>
+      console.error("[SheetsSync] single record sync failed:", err),
+    );
 
     return NextResponse.json(att);
   } catch (err: unknown) {

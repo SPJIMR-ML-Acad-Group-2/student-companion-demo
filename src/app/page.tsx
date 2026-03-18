@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { BookOpenIcon, BuildingLibraryIcon, AcademicCapIcon } from "@heroicons/react/24/outline";
+import { BuildingLibraryIcon, AcademicCapIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,24 +32,30 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 bg-[var(--color-bg-primary)]">
+    <div className="flex flex-col items-center min-h-screen px-4 py-10 bg-[var(--color-bg-primary)]">
+
+      {/* Header: app icon + name + SPJIMR logo */}
+      <div className="w-full max-w-md flex items-center gap-3 mb-8 pb-6 border-b border-[var(--color-border)]">
+        <img src="/app-icon.svg" alt="Classroom Companion" className="w-12 h-12 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl font-bold text-[var(--color-text-primary)] leading-tight" style={{ fontFamily: "var(--font-heading)" }}>
+            Classroom Companion
+          </h1>
+          <p className="text-xs text-[var(--color-text-muted)]">Attendance &amp; Analytics</p>
+        </div>
+        <img src="/SPJIMR_Logo.png" alt="SPJIMR" className="h-10 w-auto object-contain shrink-0 opacity-80" />
+      </div>
+
       <div className="w-full max-w-md">
 
         {/* Card */}
         <div className="rounded-2xl p-8 bg-[var(--color-bg-card)] border border-[var(--color-border)]">
 
-          {/* Logo */}
-          <div className="flex flex-col items-center mb-8">
-            <div
-              className="flex items-center justify-center mb-4 w-16 h-16 rounded-2xl"
-              style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
-            >
-              <BookOpenIcon className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-center text-[var(--color-text-primary)]">Classroom Companion</h1>
-            <p className="text-sm text-center mt-2 text-[var(--color-text-secondary)]">
-              Automated attendance tracking &amp; analytics for SPJIMR.<br />
-              Sign in with your Roll Number or Staff Email.
+          {/* Sign in heading */}
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Sign In</h2>
+            <p className="text-sm mt-1 text-[var(--color-text-secondary)]">
+              Enter your Roll Number or Staff Email to continue.
             </p>
           </div>
 
@@ -75,7 +81,7 @@ export default function LoginPage() {
             onClick={() => handleLogin()}
             disabled={loading}
             className="w-full text-white font-semibold"
-            style={{ background: loading ? "#531f7599" : "linear-gradient(135deg, #531f75, #8b5cf6)" }}
+            style={{ background: loading ? "#531f7599" : "#531f75" }}
           >
             {loading
               ? <><Spinner size={16} /> Signing in...</>

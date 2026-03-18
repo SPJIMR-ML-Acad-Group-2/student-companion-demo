@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
     divisionIds,
     type,
     specialisationId,
+    sheetsTabName,
     facultyIds,
   } = body;
   if (!code || !name)
@@ -171,6 +172,7 @@ export async function POST(req: NextRequest) {
           type === "specialisation" && specialisationId
             ? specialisationId
             : null,
+        sheetsTabName: sheetsTabName ?? null,
         courseTerms:
           courseTermIds.length > 0
             ? {

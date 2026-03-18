@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const startDate  = searchParams.get("startDate");
-  const endDate    = searchParams.get("endDate");
-  const divisionId = searchParams.get("divisionId");
-  const courseId   = searchParams.get("courseId");
+  const startDate        = searchParams.get("startDate");
+  const endDate          = searchParams.get("endDate");
+  const divisionIdsParam = searchParams.get("divisionIds"); // comma-separated
+  const groupIdsParam    = searchParams.get("groupIds");    // comma-separated
+  const courseId         = searchParams.get("courseId");
 
   if (!startDate || !endDate) {
     return NextResponse.json(
@@ -17,12 +19,30 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const divIds = divisionIdsParam?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+  const grpIds = groupIdsParam?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+
+  // Build the cohort filter
+  let cohortFilter: object = {};
+  if (divIds.length > 0 && grpIds.length > 0) {
+    cohortFilter = {
+      OR: [
+        { divisionId: { in: divIds } },
+        { groupId: { in: grpIds } },
+      ],
+    };
+  } else if (divIds.length > 0) {
+    cohortFilter = { divisionId: { in: divIds } };
+  } else if (grpIds.length > 0) {
+    cohortFilter = { groupId: { in: grpIds } };
+  }
+
   const timetables = await prisma.timetable.findMany({
     where: {
       date: { gte: startDate, lte: endDate },
       isConducted: true,
-      ...(divisionId ? { divisionId } : {}),
-      ...(courseId   ? { courseId   } : {}),
+      ...(courseId ? { courseId } : {}),
+      ...cohortFilter,
     },
     include: {
       course:   true,
@@ -38,14 +58,7 @@ export async function GET(req: NextRequest) {
     orderBy: [{ date: "asc" }, { slotNumber: "asc" }],
   });
 
-  const escCSV = (val: string | null | undefined) => {
-    if (val == null) return "";
-    const s = String(val);
-    return s.includes(",") || s.includes('"') || s.includes("\n")
-      ? `"${s.replace(/"/g, '""')}"`
-      : s;
-  };
-
+  // Build rows for Excel
   const header = [
     "Date",
     "Slot",
@@ -60,39 +73,53 @@ export async function GET(req: NextRequest) {
     "Status",
     "Swipe Time",
     "Remarks",
-  ].join(",");
+  ];
 
-  const rows: string[] = [header];
+  const rows: (string | number | null)[][] = [header];
 
   for (const tt of timetables) {
     const divOrGroup = tt.division?.name ?? tt.group?.name ?? "";
     for (const att of tt.attendance) {
-      rows.push(
-        [
-          tt.date,
-          tt.slotNumber,
-          escCSV(tt.slot.startTime),
-          escCSV(tt.slot.endTime),
-          escCSV(tt.course.code),
-          escCSV(tt.course.name),
-          escCSV(divOrGroup),
-          escCSV(tt.faculty?.name ?? ""),
-          escCSV(att.student.rollNumber),
-          escCSV(att.student.user.name),
-          att.status,
-          escCSV(att.swipeTime),
-          escCSV(att.remarks),
-        ].join(","),
-      );
+      rows.push([
+        tt.date,
+        tt.slotNumber,
+        tt.slot.startTime,
+        tt.slot.endTime,
+        tt.course.code,
+        tt.course.name,
+        divOrGroup,
+        tt.faculty?.name ?? "",
+        att.student.rollNumber ?? "",
+        att.student.user.name,
+        att.status,
+        att.swipeTime ?? "",
+        att.remarks ?? "",
+      ]);
     }
   }
 
-  const csv = rows.join("\r\n");
-  const filename = `attendance-${startDate}-to-${endDate}.csv`;
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
 
-  return new NextResponse(csv, {
+  // Auto-size columns (approximate)
+  const colWidths = header.map((h, i) => {
+    const maxLen = rows.reduce((max, row) => {
+      const cell = row[i];
+      return Math.max(max, cell != null ? String(cell).length : 0);
+    }, h.length);
+    return { wch: Math.min(maxLen + 2, 40) };
+  });
+  ws["!cols"] = colWidths;
+
+  XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+  const filename = `attendance-${startDate}-to-${endDate}.xlsx`;
+
+  return new NextResponse(buf, {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });

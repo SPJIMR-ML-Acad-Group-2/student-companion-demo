@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -247,30 +249,26 @@ export default function TimetableDraftPage() {
   });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [erpTermStart, setErpTermStart] = useState("");
-  const [erpTermEnd, setErpTermEnd] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const exportERP = async () => {
-    if (!erpTermStart || !erpTermEnd) {
-      alert("Please enter term start and end dates.");
-      return;
-    }
+    const termStart = weekDates[0];
+    const termEnd   = weekDates[weekDates.length - 1];
     setExporting(true);
     try {
       const res = await fetch(
-        `/api/admin/timetable/export?termStart=${erpTermStart}&termEnd=${erpTermEnd}`,
+        `/api/admin/timetable/export?termStart=${termStart}&termEnd=${termEnd}`,
       );
       if (!res.ok) {
         const e = await res.json();
-        alert(e.error ?? "Export failed");
+        toast.error(e.error ?? "Export failed");
         return;
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "ERP_Timetable_Export.zip";
+      a.download = `ERP_Timetable_${termStart}.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -749,7 +747,7 @@ export default function TimetableDraftPage() {
 
   const openAdd = (date: string, slotNumber: number) => {
     if (selectedTermId === "__all__") {
-      alert("Select a term before adding draft slots.");
+      toast.error("Select a term before adding draft slots.");
       return;
     }
 
@@ -955,8 +953,8 @@ export default function TimetableDraftPage() {
         }),
       });
       const data = await res.json();
-      alert(
-        `Synced week: ${data.published} published${data.skipped ? `, ${data.skipped} skipped` : ""}${data.removed ? `, ${data.removed} removed` : ""}.`,
+      toast.success(
+        `Synced week: ${data.published} published${data.skipped ? `, ${data.skipped} skipped` : ""}${data.removed ? `, ${data.removed} removed` : ""}`,
       );
       setShowPublishDialog(false);
       fetchDrafts();
@@ -1049,49 +1047,6 @@ export default function TimetableDraftPage() {
             students.
           </p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          {/* ERP Export — desktop only */}
-          <div className="hidden md:flex items-end gap-2 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-            <div>
-              <label className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-1">
-                Term Start
-              </label>
-              <input
-                type="date"
-                value={erpTermStart}
-                onChange={(e) => setErpTermStart(e.target.value)}
-                className="h-8 px-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[#531f75]"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-1">
-                Term End
-              </label>
-              <input
-                type="date"
-                value={erpTermEnd}
-                onChange={(e) => setErpTermEnd(e.target.value)}
-                className="h-8 px-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-primary)] focus:outline-none focus:border-[#531f75]"
-              />
-            </div>
-            <Button
-              onClick={exportERP}
-              disabled={exporting}
-              variant="outline"
-              className="h-8 text-xs border-[#531f75]/40 text-[#531f75] hover:bg-[#531f75]/10"
-            >
-              <ArrowDownTrayIcon className="w-3.5 h-3.5 mr-1" />
-              {exporting ? "Exporting…" : "Export ERP"}
-            </Button>
-          </div>
-          <Button
-            onClick={() => setShowPublishDialog(true)}
-            disabled={publishing}
-            className="bg-[#531f75] hover:bg-[#531f75]/90 text-white h-8"
-          >
-            Publish Sync ({pendingCount})
-          </Button>
-        </div>
       </div>
 
       {/* Week navigation */}
@@ -1119,6 +1074,26 @@ export default function TimetableDraftPage() {
         >
           Today
         </Button>
+        <div className="ml-auto hidden md:flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportERP}
+            disabled={exporting}
+            className="text-[#f58220] border-[#f58220]/40 hover:bg-[#f58220]/10"
+          >
+            <ArrowDownTrayIcon className="w-3.5 h-3.5 mr-1.5" />
+            {exporting ? "Exporting…" : "Export to ERP"}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setShowPublishDialog(true)}
+            disabled={publishing}
+            className="bg-[#531f75] hover:bg-[#531f75]/90 text-white"
+          >
+            Publish for Students ({pendingCount})
+          </Button>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -1345,6 +1320,9 @@ export default function TimetableDraftPage() {
                                   >
                                     {entry.course.code}
                                   </div>
+                                  <div className="text-[var(--color-text-secondary)] truncate text-[10px]">
+                                    {entry.course.name}
+                                  </div>
                                   <div className="text-[var(--color-text-secondary)] truncate">
                                     {entry.division?.name ?? entry.group?.name}
                                   </div>
@@ -1400,8 +1378,8 @@ export default function TimetableDraftPage() {
               </tbody>
             </table>
             {loading && (
-              <div className="flex items-center justify-center py-8 text-sm text-[var(--color-text-muted)]">
-                Loading drafts…
+              <div className="flex items-center justify-center py-8">
+                <Spinner size={24} />
               </div>
             )}
           </CardContent>

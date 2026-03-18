@@ -18,6 +18,7 @@ import {
   ChevronUpIcon,
   ClipboardDocumentListIcon,
 } from "@heroicons/react/24/outline";
+import { getSlot } from "@/lib/slots";
 
 interface PenaltyInfo {
   level: string;
@@ -76,17 +77,20 @@ interface StudentData {
 
 function ProgressRing({
   percentage,
+  noData = false,
   size = 72,
 }: {
   percentage: number;
+  noData?: boolean;
   size?: number;
 }) {
   const sw = 6,
     r = (size - sw) / 2,
     circ = 2 * Math.PI * r;
-  const offset = circ - (percentage / 100) * circ;
-  const color =
-    percentage >= 85 ? "#22c55e" : percentage >= 75 ? "#f58220" : "#ef4444";
+  const offset = noData ? circ : circ - (percentage / 100) * circ;
+  const color = noData
+    ? "var(--color-text-muted)"
+    : percentage >= 85 ? "#22c55e" : percentage >= 75 ? "#f58220" : "#ef4444";
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
@@ -95,26 +99,28 @@ function ProgressRing({
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="rgba(255,255,255,0.08)"
+          stroke="rgba(128,128,128,0.15)"
           strokeWidth={sw}
         />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth={sw}
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          strokeDashoffset={offset}
-        />
+        {!noData && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={sw}
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={offset}
+          />
+        )}
       </svg>
       <span
         className="absolute inset-0 flex items-center justify-center font-bold"
-        style={{ color, fontSize: size * 0.22 }}
+        style={{ color, fontSize: noData ? size * 0.18 : size * 0.22 }}
       >
-        {percentage}%
+        {noData ? "—" : `${percentage}%`}
       </span>
     </div>
   );
@@ -171,15 +177,17 @@ export default function StudentDashboard() {
   const overallPct =
     totalSessions > 0
       ? Math.round(((totalPresent + totalLate) / totalSessions) * 100)
-      : 100;
+      : null;
 
   const statCards = [
     {
       label: "Overall",
-      value: `${overallPct}%`,
+      value: overallPct !== null ? `${overallPct}%` : "No data yet",
       color:
-        overallPct >= 85 ? "#22c55e" : overallPct >= 75 ? "#f58220" : "#ef4444",
-      sub: `${totalPresent + totalLate}/${totalSessions}`,
+        overallPct === null
+          ? "var(--color-text-muted)"
+          : overallPct >= 85 ? "#22c55e" : overallPct >= 75 ? "#f58220" : "#ef4444",
+      sub: overallPct !== null ? `${totalPresent + totalLate}/${totalSessions}` : null,
     },
     { label: "Present", value: totalPresent, color: "#22c55e", sub: null },
     { label: "Late", value: totalLate, color: "#f58220", sub: null },
@@ -494,7 +502,7 @@ function CourseCard({
               {p.level === "none" ? "● No Penalty" : `⚠ ${p.label}`}
             </Badge>
           </div>
-          <ProgressRing percentage={course.percentage} />
+          <ProgressRing percentage={course.percentage} noData={course.totalConducted === 0} />
         </div>
 
         {/* Stats row */}
@@ -503,7 +511,7 @@ function CourseCard({
             { label: "Present", value: course.present, color: "#22c55e" },
             { label: "Absent", value: course.absent, color: "#ef4444" },
             { label: "Late", value: course.late, color: "#f58220" },
-            { label: "P# Leave", value: course.pLeave, color: "#8b5cf6" },
+            { label: "Sanctioned Leave", value: course.pLeave, color: "#f58220" },
           ].map(({ label, value, color }) => (
             <div
               key={label}
@@ -566,7 +574,7 @@ function CourseCard({
           variant="ghost"
           size="sm"
           onClick={onToggle}
-          className="w-full mt-2 text-xs font-semibold text-[#8b5cf6] hover:text-[#531f75] hover:bg-[#531f75]/10"
+          className="w-full mt-2 text-xs font-semibold text-[#f58220] hover:text-[#531f75] hover:bg-[#531f75]/10"
         >
           {expanded ? (
             <>
@@ -615,7 +623,7 @@ function CourseCard({
                         {l.date}
                       </TableCell>
                       <TableCell className="text-[var(--color-text-secondary)] text-xs py-2">
-                        Slot {l.slot}
+                        {getSlot(l.slot)?.label ?? `Slot ${l.slot}`}
                       </TableCell>
                       <TableCell className="py-2">
                         <Badge

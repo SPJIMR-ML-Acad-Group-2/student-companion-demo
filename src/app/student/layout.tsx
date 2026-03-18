@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import StudentSidebar from "@/components/StudentSidebar";
 import { Spinner } from "@/components/ui/spinner";
-import { Bars3Icon, BookOpenIcon } from "@heroicons/react/24/outline";
+import { Bars3Icon } from "@heroicons/react/24/outline";
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState<string | null>(null);
@@ -38,9 +38,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           <Bars3Icon className="w-6 h-6 text-[var(--color-text-primary)]" />
         </button>
         <div className="flex items-center gap-2 ml-3">
-          <div className="flex items-center justify-center shrink-0 w-7 h-7 rounded-lg" style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}>
-            <BookOpenIcon className="w-4 h-4 text-white" />
-          </div>
+          <img src="/app-icon.svg" alt="Classroom Companion" className="shrink-0 w-7 h-7" />
           <span className="text-sm font-semibold text-[var(--color-text-primary)]">Classroom Companion</span>
         </div>
       </div>

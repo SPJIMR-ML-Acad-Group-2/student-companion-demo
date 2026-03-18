@@ -34,6 +34,7 @@ export default function RootLayout({
       className={cn("font-sans", nunitoSans.variable, lora.variable)}
     >
       <head>
+        <link rel="icon" href="/app-icon.svg" type="image/svg+xml" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t)})()`,
