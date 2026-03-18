@@ -3,9 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url = "file:./dev.db"
-  // directUrl = env("DIRECT_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Programmes & Batches ──────────────────────────────
@@ -51,6 +51,7 @@ model Term {
   draftTimetable DraftTimetable[]
   divisionRoomAssignments DivisionTermRoom[]
   groupRoomAssignments    GroupTermRoom[]
+  sheetsConfigs           GoogleSheetsConfig[]
 
   @@unique([batchId, number])
 }
@@ -81,6 +82,7 @@ model Division {
   divisionTermRooms DivisionTermRoom[]
   timetable      Timetable[]
   draftTimetable DraftTimetable[]
+  sheetsConfigs  GoogleSheetsConfig[]
 
   @@unique([name, batchId])
 }
@@ -104,6 +106,7 @@ model Group {
   groupTermRooms   GroupTermRoom[]
   timetable        Timetable[]
   draftTimetable   DraftTimetable[]
+  sheetsConfigs    GoogleSheetsConfig[]
 
   @@unique([name, batchId])
 }
@@ -222,6 +225,7 @@ model Course {
   type             String           @default("core") // "core" | "specialisation" | "minor" | "elective"
   specialisationId String?
   erpSubjectCode   String? // ERP subject code, e.g. "ABH (NCL503-PDM)"
+  sheetsTabName    String? // Google Sheets tab name, e.g. "HRM", "MM-1" — shared across all divisions
   specialisation   Specialisation?  @relation("SpecCourses", fields: [specialisationId], references: [id])
   courseTerms      CourseTerm[]
   courseDivisions  CourseDivision[]
@@ -341,9 +345,65 @@ model Attendance {
   status      String // "P" | "AB" | "LT" | "P#" (sanctioned leave)
   swipeTime   String? // HH:mm:ss
   remarks     String? // reason for manual status change
-  timetable   Timetable @relation(fields: [timetableId], references: [id])
-  student     Student   @relation(fields: [studentId], references: [id])
-  createdAt   DateTime  @default(now())
+  timetable   Timetable          @relation(fields: [timetableId], references: [id])
+  student     Student            @relation(fields: [studentId], references: [id])
+  syncLog     AttendanceSyncLog?
+  createdAt   DateTime           @default(now())
 
   @@unique([timetableId, studentId])
+}
+
+// ─── Async Upload Jobs ─────────────────────────────────
+
+model UploadJob {
+  id                String    @id @default(uuid())
+  status            String    // "queued" | "processing" | "completed" | "failed"
+  fileName          String    @default("")
+  totalSwipes       Int       @default(0)
+  studentsMatched   Int       @default(0)
+  studentsNotFound  Int       @default(0)
+  attendanceMarked  Int       @default(0)
+  absentMarked      Int       @default(0)
+  lateMarked        Int       @default(0)
+  duplicatesSkipped Int       @default(0)
+  errors            String    @default("[]") // JSON-encoded string[]
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// ─── Google Sheets Sync ────────────────────────────────
+
+model GoogleSheetsConfig {
+  id            String    @id @default(uuid())
+  divisionId    String?             // either divisionId or groupId (not both)
+  groupId       String?
+  termId        String              // required — one workbook per cohort per term
+  spreadsheetId String    // Google Sheets file ID from the URL: /d/[ID]/edit
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  division      Division? @relation(fields: [divisionId], references: [id])
+  group         Group?    @relation(fields: [groupId], references: [id])
+  term          Term      @relation(fields: [termId], references: [id])
+  syncLogs      AttendanceSyncLog[]
+
+  @@unique([divisionId, termId])
+  @@unique([groupId, termId])
+}
+
+model AttendanceSyncLog {
+  id            String              @id @default(uuid())
+  attendanceId  String              @unique
+  timetableId   String              // denormalized for fast queries
+  studentId     String              // denormalized
+  configId      String?             // null = no config exists for this cohort+course
+  status        String              // "pending" | "synced" | "failed" | "skipped"
+  attempts      Int                 @default(0)
+  lastAttemptAt DateTime?
+  errorMessage  String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  attendance    Attendance          @relation(fields: [attendanceId], references: [id])
+  config        GoogleSheetsConfig? @relation(fields: [configId], references: [id])
 }

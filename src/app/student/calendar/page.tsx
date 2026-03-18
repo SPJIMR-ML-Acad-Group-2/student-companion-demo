@@ -103,7 +103,7 @@ export default function StudentCalendar() {
                 !att          ? (entry.hasSession ? (entry.noSwipes ? "⚠ No Swipes" : "—") : "") :
                 att.status === "P"  ? "✓ Present" :
                 att.status === "AB" ? "✗ Absent"  :
-                att.status === "P#" ? "🛡 Leave"  : `⏱ ${att.status}`;
+                att.status === "P#" ? "🛡 Sanctioned Leave"  : `⏱ ${att.status}`;
               const bgColor =
                 att?.status === "P"  ? "rgba(34,197,94,0.07)"  :
                 att?.status === "AB" ? "rgba(239,68,68,0.07)"  :
@@ -140,7 +140,7 @@ export default function StudentCalendar() {
         <span className="text-[var(--color-success)]">✓ Present</span>
         <span className="text-[var(--color-danger)]">✗ Absent</span>
         <span className="text-[var(--color-warning)]">⏱ Late</span>
-        <span className="text-[#3b82f6]">🛡 Leave</span>
+        <span className="text-[#3b82f6]">🛡 Sanctioned Leave</span>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import React, {
   useMemo,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -33,12 +34,16 @@ import {
   StarIcon,
   BookOpenIcon,
   UserGroupIcon,
-  CalendarDaysIcon,
   PencilSquareIcon,
   TrashIcon,
   PlusIcon,
   ArrowUpTrayIcon,
   Cog6ToothIcon,
+  TableCellsIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
@@ -144,6 +149,7 @@ interface Course {
   credits: number;
   type: string;
   specialisationId: string | null;
+  sheetsTabName?: string | null;
   specialisation?: Specialisation | null;
   courseTerms?: { term: Term & { batch?: Batch } }[];
   courseDivisions?: { division: Division }[];
@@ -190,8 +196,8 @@ export default function ManagePage() {
     { value: "specialisations", label: "Specs", Icon: StarIcon },
     { value: "courses", label: "Courses", Icon: BookOpenIcon },
     { value: "faculty", label: "Faculty", Icon: UserGroupIcon },
-    { value: "timetable", label: "Timetable", Icon: CalendarDaysIcon },
     { value: "erp-settings", label: "ERP Settings", Icon: Cog6ToothIcon },
+    { value: "sheets-sync", label: "Sheets Sync", Icon: TableCellsIcon },
   ];
 
   return (
@@ -255,16 +261,16 @@ export default function ManagePage() {
           <FacultyTab />
         </TabsContent>
         <TabsContent
-          value="timetable"
-          className="border border-[var(--color-border)] rounded-[5px] p-4"
-        >
-          <TimetableTab />
-        </TabsContent>
-        <TabsContent
           value="erp-settings"
           className="border border-[var(--color-border)] rounded-[5px] p-4"
         >
           <ErpSettingsTab />
+        </TabsContent>
+        <TabsContent
+          value="sheets-sync"
+          className="border border-[var(--color-border)] rounded-[5px] p-4"
+        >
+          <SheetsSyncTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -277,6 +283,7 @@ function StudentsTab() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [specialisations, setSpecialisations] = useState<Specialisation[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -293,16 +300,20 @@ function StudentsTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = useCallback(async () => {
-    const [sR, bR, dR, spR] = await Promise.all([
-      fetch("/api/admin/students"),
-      fetch("/api/admin/batches"),
-      fetch("/api/admin/divisions"),
-      fetch("/api/admin/specialisations"),
-    ]);
-    setStudents(await sR.json());
-    setBatches(await bR.json());
-    setDivisions(await dR.json());
-    setSpecialisations(await spR.json());
+    try {
+      const [sR, bR, dR, spR] = await Promise.all([
+        fetch("/api/admin/students"),
+        fetch("/api/admin/batches"),
+        fetch("/api/admin/divisions"),
+        fetch("/api/admin/specialisations"),
+      ]);
+      setStudents(await sR.json());
+      setBatches(await bR.json());
+      setDivisions(await dR.json());
+      setSpecialisations(await spR.json());
+    } finally {
+      setLoading(false);
+    }
   }, []);
   useEffect(() => {
     fetchAll();
@@ -348,8 +359,11 @@ function StudentsTab() {
       setShowForm(false);
       setEditingId(null);
       fetchAll();
+      toast.success(editingId ? "Student updated" : "Student created");
     } else {
-      setError((await res.json()).error || "Failed");
+      const msg = (await res.json()).error || "Failed";
+      setError(msg);
+      toast.error(msg);
     }
   };
   const startEdit = (s: Student) => {
@@ -442,6 +456,8 @@ function StudentsTab() {
       ),
     },
   ];
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
 
   return (
     <div>
@@ -647,10 +663,15 @@ function ProgrammesTab() {
   const [termDrafts, setTermDrafts] = useState<
     Record<string, { startDate: string; endDate: string }>
   >({});
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const fetch_ = useCallback(async () => {
-    setProgrammes(await (await fetch("/api/admin/programmes")).json());
+    try {
+      setProgrammes(await (await fetch("/api/admin/programmes")).json());
+    } finally {
+      setLoading(false);
+    }
   }, []);
   useEffect(() => {
     fetch_();
@@ -675,11 +696,14 @@ function ProgrammesTab() {
     });
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error ?? "Could not update programme");
+      const msg = data.error ?? "Could not update programme";
+      setError(msg);
+      toast.error(msg);
       return;
     }
     setEditingProgrammeId(null);
     fetch_();
+    toast.success("Programme updated");
   };
 
   const toggleBatchStatus = async (batch: BatchFull) => {
@@ -691,10 +715,13 @@ function ProgrammesTab() {
     });
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error ?? "Could not update batch status");
+      const msg = data.error ?? "Could not update batch status";
+      setError(msg);
+      toast.error(msg);
       return;
     }
     fetch_();
+    toast.success(`Batch ${!batch.isActive ? "activated" : "deactivated"}`);
   };
 
   const getTermDraft = (term: Term) =>
@@ -771,12 +798,15 @@ function ProgrammesTab() {
     });
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error ?? "Could not create programme");
+      const msg = data.error ?? "Could not create programme";
+      setError(msg);
+      toast.error(msg);
       return;
     }
     setForm({ code: "", name: "", fullName: "" });
     setShowForm(false);
     fetch_();
+    toast.success("Programme created");
   };
   const addBatch = async () => {
     setError("");
@@ -791,11 +821,14 @@ function ProgrammesTab() {
     });
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error ?? "Could not create batch");
+      const msg = data.error ?? "Could not create batch";
+      setError(msg);
+      toast.error(msg);
       return;
     }
     setBatchForm({ programmeId: "", name: "", startYear: "", endYear: "" });
     fetch_();
+    toast.success("Batch created");
   };
   const addTerm = async () => {
     setError("");
@@ -811,12 +844,17 @@ function ProgrammesTab() {
     });
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error ?? "Could not create term");
+      const msg = data.error ?? "Could not create term";
+      setError(msg);
+      toast.error(msg);
       return;
     }
     setTermForm({ batchId: "", number: "", startDate: "", endDate: "" });
     fetch_();
+    toast.success("Term created");
   };
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
 
   return (
     <div>
@@ -917,7 +955,7 @@ function ProgrammesTab() {
                   <>
                     <div className="text-lg font-semibold text-[var(--color-text-primary)]">
                       {p.name}{" "}
-                      <span className="text-sm text-[#8b5cf6]">({p.code})</span>
+                      <span className="text-sm text-[#f58220]">({p.code})</span>
                     </div>
                     <div className="text-sm text-[var(--color-text-muted)]">
                       {p.fullName}
@@ -1251,7 +1289,10 @@ function DivisionsTab() {
     Record<string, string>
   >({});
   const [form, setForm] = useState({ name: "", batchId: "" });
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pendingDefaultRoom, setPendingDefaultRoom] = useState<Record<string, string | null>>({});
+  const [pendingTermRoom, setPendingTermRoom] = useState<Record<string, { termId: string; roomId: string | null }>>({});
   const fetchAll = useCallback(async () => {
     const [dR, bR, tR, rR] = await Promise.all([
       fetch("/api/admin/divisions"),
@@ -1287,46 +1328,52 @@ function DivisionsTab() {
 
     const roomData = await rR.json();
     setRooms(Array.isArray(roomData) ? roomData : []);
+    setLoading(false);
   }, []);
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  const updateDefaultRoom = async (divId: string, roomId: string | null) => {
-    await fetch("/api/admin/divisions", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: divId, defaultRoomId: roomId }),
-    });
-    fetchAll();
-  };
-
-  const updateTermRoom = async (
-    divId: string,
-    termId: string,
-    roomId: string | null,
-  ) => {
-    const division = divisions.find((d) => d.id === divId);
-    if (!division || !termId) return;
-    const baseAssignments = division.termRoomAssignments ?? [];
-    const nextAssignments = baseAssignments.filter(
-      (item) => item.termId !== termId,
-    );
-    if (roomId) {
-      nextAssignments.push({ termId, roomId });
+  const saveDivisionRooms = async (divId: string) => {
+    const tasks: Promise<void>[] = [];
+    if (pendingDefaultRoom[divId] !== undefined) {
+      tasks.push(
+        fetch("/api/admin/divisions", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: divId, defaultRoomId: pendingDefaultRoom[divId] }),
+        }).then(() => undefined),
+      );
     }
-    await fetch("/api/admin/divisions", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: divId,
-        termRoomAssignments: nextAssignments.map((item) => ({
-          termId: item.termId,
-          roomId: item.roomId,
-        })),
-      }),
-    });
-    fetchAll();
+    if (pendingTermRoom[divId]) {
+      const { termId, roomId } = pendingTermRoom[divId];
+      const division = divisions.find((d) => d.id === divId);
+      if (division) {
+        const baseAssignments = division.termRoomAssignments ?? [];
+        const nextAssignments = baseAssignments.filter((item) => item.termId !== termId);
+        if (roomId) nextAssignments.push({ termId, roomId });
+        tasks.push(
+          fetch("/api/admin/divisions", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: divId,
+              termRoomAssignments: nextAssignments.map((item) => ({ termId: item.termId, roomId: item.roomId })),
+            }),
+          }).then(() => undefined),
+        );
+      }
+    }
+    if (tasks.length === 0) { toast.info("No changes to save"); return; }
+    try {
+      await Promise.all(tasks);
+      setPendingDefaultRoom((prev) => { const next = { ...prev }; delete next[divId]; return next; });
+      setPendingTermRoom((prev) => { const next = { ...prev }; delete next[divId]; return next; });
+      fetchAll();
+      toast.success("Room assignment saved");
+    } catch {
+      toast.error("Failed to save room assignment");
+    }
   };
 
   const getBatchTerms = (batchId: string) =>
@@ -1348,10 +1395,15 @@ function DivisionsTab() {
     if (res.ok) {
       setForm({ name: "", batchId: "" });
       fetchAll();
+      toast.success("Division created");
     } else {
-      setError((await res.json()).error);
+      const msg = (await res.json()).error || "Failed";
+      setError(msg);
+      toast.error(msg);
     }
   };
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
 
   return (
     <div>
@@ -1414,6 +1466,9 @@ function DivisionsTab() {
                 <th className="text-left py-2 text-xs uppercase text-[var(--color-text-muted)]">
                   Term Room
                 </th>
+                <th className="text-left py-2 text-xs uppercase text-[var(--color-text-muted)]">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1433,9 +1488,9 @@ function DivisionsTab() {
                   </td>
                   <td className="py-2">
                     <Select
-                      value={d.defaultRoomId || "__none__"}
+                      value={pendingDefaultRoom[d.id] !== undefined ? (pendingDefaultRoom[d.id] ?? "__none__") : (d.defaultRoomId || "__none__")}
                       onValueChange={(v) =>
-                        updateDefaultRoom(d.id, v === "__none__" ? null : v)
+                        setPendingDefaultRoom((prev) => ({ ...prev, [d.id]: v === "__none__" ? null : v }))
                       }
                     >
                       <SelectTrigger className="h-7 text-xs w-[140px] bg-[var(--color-bg-secondary)] border-[var(--color-border)]">
@@ -1482,18 +1537,19 @@ function DivisionsTab() {
                           </SelectContent>
                         </Select>
                         <Select
-                          value={getTermRoomValue(
-                            d,
-                            selectedTermByDivision[d.id] ||
-                              getBatchTerms(d.batchId)[0].id,
-                          )}
+                          value={
+                            pendingTermRoom[d.id]?.termId === (selectedTermByDivision[d.id] || getBatchTerms(d.batchId)[0].id)
+                              ? (pendingTermRoom[d.id]?.roomId ?? "__none__")
+                              : getTermRoomValue(d, selectedTermByDivision[d.id] || getBatchTerms(d.batchId)[0].id)
+                          }
                           onValueChange={(v) =>
-                            updateTermRoom(
-                              d.id,
-                              selectedTermByDivision[d.id] ||
-                                getBatchTerms(d.batchId)[0].id,
-                              v === "__none__" ? null : v,
-                            )
+                            setPendingTermRoom((prev) => ({
+                              ...prev,
+                              [d.id]: {
+                                termId: selectedTermByDivision[d.id] || getBatchTerms(d.batchId)[0].id,
+                                roomId: v === "__none__" ? null : v,
+                              },
+                            }))
                           }
                         >
                           <SelectTrigger className="h-7 text-xs w-[140px] bg-[var(--color-bg-secondary)] border-[var(--color-border)]">
@@ -1511,6 +1567,16 @@ function DivisionsTab() {
                       </div>
                     )}
                   </td>
+                  <td className="py-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 text-xs"
+                      onClick={() => saveDivisionRooms(d.id)}
+                    >
+                      Save
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1525,43 +1591,53 @@ function DivisionsTab() {
 function SpecialisationsTab() {
   const [specs, setSpecs] = useState<Specialisation[]>([]);
   const [form, setForm] = useState({ name: "", code: "" });
+  const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
-  const [message, setMessage] = useState("");
   const fetch_ = useCallback(async () => {
-    setSpecs(await (await fetch("/api/admin/specialisations")).json());
+    try {
+      setSpecs(await (await fetch("/api/admin/specialisations")).json());
+    } finally {
+      setLoading(false);
+    }
   }, []);
   useEffect(() => {
     fetch_();
   }, [fetch_]);
   const addSpec = async () => {
-    await fetch("/api/admin/specialisations", {
+    const res = await fetch("/api/admin/specialisations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
-    setForm({ name: "", code: "" });
-    fetch_();
+    if (res.ok) {
+      setForm({ name: "", code: "" });
+      fetch_();
+      toast.success("Specialisation created");
+    } else {
+      toast.error((await res.json()).error || "Failed to create");
+    }
   };
   const regenerateGroups = async () => {
     setRegenerating(true);
-    setMessage("");
     try {
       const res = await fetch("/api/admin/specialisations/regenerate", {
         method: "POST",
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessage(data.error || "Regeneration failed");
+        toast.error(data.error || "Regeneration failed");
         return;
       }
-      setMessage(
-        `Shared groups regenerated: ${data.deletedDuplicateGroups} duplicates merged, ${data.createdAllowedBatchLinks} batch links added, ${data.linkedCourseGroups} course mappings created.`,
+      toast.success(
+        `Groups regenerated: ${data.deletedDuplicateGroups} merged, ${data.createdAllowedBatchLinks} batch links, ${data.linkedCourseGroups} course mappings.`,
       );
       fetch_();
     } finally {
       setRegenerating(false);
     }
   };
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -1579,11 +1655,6 @@ function SpecialisationsTab() {
       </div>
       <Card className="mb-5 bg-[var(--color-bg-card)] border-[var(--color-border)]">
         <CardContent className="p-4">
-          {message ? (
-            <p className="text-xs text-[var(--color-text-secondary)] mb-3">
-              {message}
-            </p>
-          ) : null}
           <FieldLabel text="Add Specialisation" />
           <div className="flex gap-2 items-end flex-wrap">
             <div>
@@ -1789,6 +1860,7 @@ function CoursesTab() {
   const [allTerms, setAllTerms] = useState<Term[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const emptyForm = {
@@ -1798,6 +1870,7 @@ function CoursesTab() {
     credits: "3",
     type: "core",
     specialisationId: "",
+    sheetsTabName: "",
     selectedBatchIds: [] as string[],
     termIds: [] as string[],
     divisionIds: [] as string[],
@@ -1830,6 +1903,7 @@ function CoursesTab() {
     setAllFaculty(await fR.json());
     setAllGroups(await gR.json());
     setAllTerms(await tR.json());
+    setLoading(false);
   }, []);
   useEffect(() => {
     fetchAll();
@@ -1847,6 +1921,7 @@ function CoursesTab() {
         form.type === "specialisation" && form.specialisationId
           ? form.specialisationId
           : null,
+      sheetsTabName: form.sheetsTabName.trim() || null,
       termIds: form.termIds,
       divisionIds: form.divisionIds,
       groupIds: form.groupIds,
@@ -1866,8 +1941,11 @@ function CoursesTab() {
     if (res.ok) {
       closeCourseForm();
       fetchAll();
+      toast.success(editingId ? "Course updated" : "Course created");
     } else {
-      setError((await res.json()).error || "Failed");
+      const msg = (await res.json()).error || "Failed";
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -1888,6 +1966,7 @@ function CoursesTab() {
       credits: String(c.credits),
       type: c.type,
       specialisationId: c.specialisationId || "",
+      sheetsTabName: c.sheetsTabName ?? "",
       selectedBatchIds: existingBatchIds,
       termIds: existingTermIds,
       divisionIds: c.courseDivisions?.map((cd) => cd.division.id) ?? [],
@@ -2135,6 +2214,21 @@ function CoursesTab() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div className="min-w-0">
+          <FieldLabel text="Sheets Tab Name" />
+          <Input
+            value={form.sheetsTabName}
+            onChange={(e) => setForm({ ...form, sheetsTabName: e.target.value })}
+            placeholder='e.g. "HRM", "MM-1", "BP&S-II"'
+            className="bg-[var(--color-bg-secondary)] border-[var(--color-border)]"
+          />
+          <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+            Tab name in the Google Sheets workbook for this course (Sheets Sync)
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">
         <div className="min-w-0">
           <FieldLabel text="Type" />
@@ -2304,6 +2398,8 @@ function CoursesTab() {
     </>
   );
 
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -2366,6 +2462,7 @@ function GroupsTab() {
   const [terms, setTerms] = useState<Term[]>([]);
   const [rooms, setRooms] = useState<Array<{ id: string; name: string }>>([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const emptyForm = {
     name: "",
@@ -2414,6 +2511,7 @@ function GroupsTab() {
     setSpecs(await sR.json());
     setTerms(await tR.json());
     setRooms(await rR.json());
+    setLoading(false);
   }, []);
   useEffect(() => {
     fetchAll();
@@ -2440,8 +2538,11 @@ function GroupsTab() {
       setForm(emptyForm);
       setShowForm(false);
       fetchAll();
+      toast.success("Group created");
     } else {
-      setError((await res.json()).error || "Failed");
+      const msg = (await res.json()).error || "Failed";
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -2467,14 +2568,19 @@ function GroupsTab() {
   const saveMembers = async () => {
     if (!managingGroup) return;
     setMemberSaving(true);
-    await fetch("/api/admin/groups", {
+    const res = await fetch("/api/admin/groups", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: managingGroup.id, studentIds: stagedIds }),
     });
     setMemberSaving(false);
-    setManagingGroup(null);
-    fetchAll();
+    if (res.ok) {
+      setManagingGroup(null);
+      fetchAll();
+      toast.success("Members saved");
+    } else {
+      toast.error((await res.json()).error || "Failed to save members");
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -2482,8 +2588,9 @@ function GroupsTab() {
     const res = await fetch(`/api/admin/groups?id=${id}`, { method: "DELETE" });
     if (res.ok) {
       fetchAll();
+      toast.success("Group deleted");
     } else {
-      alert((await res.json()).error || "Cannot delete");
+      toast.error((await res.json()).error || "Cannot delete group");
     }
   };
 
@@ -2546,6 +2653,7 @@ function GroupsTab() {
     setEditSaving(false);
     if (!res.ok) {
       setEditError(payload?.error || "Failed to undo");
+      toast.error(payload?.error || "Failed to undo");
       return;
     }
     setEditForm((current) => ({
@@ -2554,6 +2662,7 @@ function GroupsTab() {
     }));
     setUndoAutoClean(null);
     fetchAll();
+    toast.success("Membership reverted");
   };
 
   const handleEdit = async () => {
@@ -2610,13 +2719,17 @@ function GroupsTab() {
             : current,
         );
         fetchAll();
+        toast.info(`${payload.autoRemovedMembersCount} member(s) removed — batch changed`);
         return;
       }
       setEditingGroup(null);
       setUndoAutoClean(null);
       fetchAll();
+      toast.success("Group updated");
     } else {
-      setEditError(payload?.error || "Failed");
+      const msg = payload?.error || "Failed";
+      setEditError(msg);
+      toast.error(msg);
     }
   };
 
@@ -2749,6 +2862,8 @@ function GroupsTab() {
 
     return Array.from(bucket.values()).sort((a, b) => a.number - b.number);
   }, [terms, editForm.allowedBatchIds]);
+
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
 
   return (
     <div>
@@ -3183,12 +3298,17 @@ function GroupsTab() {
 function FacultyTab() {
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const empty = { name: "", email: "", teachingArea: "" };
   const [form, setForm] = useState(empty);
   const fetchAll = useCallback(async () => {
-    setFaculty(await (await fetch("/api/admin/faculty")).json());
+    try {
+      setFaculty(await (await fetch("/api/admin/faculty")).json());
+    } finally {
+      setLoading(false);
+    }
   }, []);
   useEffect(() => {
     fetchAll();
@@ -3211,8 +3331,11 @@ function FacultyTab() {
       setShowForm(false);
       setEditingId(null);
       fetchAll();
+      toast.success(editingId ? "Faculty updated" : "Faculty created");
     } else {
-      setError((await res.json()).error || "Failed");
+      const msg = (await res.json()).error || "Failed";
+      setError(msg);
+      toast.error(msg);
     }
   };
   const startEdit = (f: Faculty) => {
@@ -3287,6 +3410,7 @@ function FacultyTab() {
       ),
     },
   ];
+  if (loading) return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -3363,33 +3487,6 @@ function FacultyTab() {
         data={faculty}
         searchPlaceholder="Search faculty..."
       />
-    </div>
-  );
-}
-
-/* ─── Timetable Tab ────────────────────────────────────── */
-function TimetableTab() {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-[#531f75]/10 flex items-center justify-center">
-        <CalendarDaysIcon className="w-8 h-8 text-[#531f75]" />
-      </div>
-      <div>
-        <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
-          Timetable has moved
-        </h2>
-        <p className="text-sm text-[var(--color-text-muted)] max-w-sm">
-          Draft timetable creation, editing, and publishing are now in the
-          dedicated Timetable page. Use the sidebar link or the button below.
-        </p>
-      </div>
-      <a
-        href="/office/timetable"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#531f75] text-white text-sm font-medium hover:bg-[#531f75]/90 transition-colors"
-      >
-        <CalendarDaysIcon className="w-4 h-4" />
-        Go to Timetable
-      </a>
     </div>
   );
 }
@@ -3747,6 +3844,574 @@ function ErpSettingsTab() {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Sheets Sync Tab ──────────────────────────────────── */
+
+interface SheetsConfig {
+  id: string;
+  divisionId: string | null;
+  groupId: string | null;
+  termId: string;
+  spreadsheetId: string;
+  isActive: boolean;
+  division: { id: string; name: string } | null;
+  group: { id: string; name: string } | null;
+  term: { id: string; name: string; batchId: string };
+}
+
+interface SyncStatus {
+  pending: number;
+  failed: number;
+  synced: number;
+  skipped: number;
+  recentFailures: Array<{
+    attendanceId: string;
+    studentRollNumber: string;
+    courseName: string;
+    sessionDate: string;
+    error: string;
+    lastAttemptAt: string | null;
+    attempts: number;
+  }>;
+}
+
+function SheetsSyncTab() {
+  const [configs, setConfigs] = useState<SheetsConfig[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [batches, setBatches] = useState<BatchFull[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [cohortType, setCohortType] = useState<"division" | "group">("division");
+  const [newBatchId, setNewBatchId] = useState("");
+  const [newTermId, setNewTermId] = useState("");
+  const [newDivisionId, setNewDivisionId] = useState("");
+  const [newGroupId, setNewGroupId] = useState("");
+  const [newSpreadsheetId, setNewSpreadsheetId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [includeSkipped, setIncludeSkipped] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSpreadsheetId, setEditSpreadsheetId] = useState("");
+  const [editTermId, setEditTermId] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [cfgRes, statusRes, divRes, grpRes, crsRes, batchRes, termRes] = await Promise.all([
+        fetch("/api/admin/sheets-config"),
+        fetch("/api/admin/sheets-sync/status"),
+        fetch("/api/admin/divisions"),
+        fetch("/api/admin/groups"),
+        fetch("/api/admin/courses"),
+        fetch("/api/admin/batches"),
+        fetch("/api/admin/terms"),
+      ]);
+      if (cfgRes.ok) setConfigs(await cfgRes.json());
+      if (statusRes.ok) setSyncStatus(await statusRes.json());
+      if (divRes.ok) setDivisions(await divRes.json());
+      if (grpRes.ok) setGroups(await grpRes.json());
+      if (crsRes.ok) setCourses(await crsRes.json());
+      if (batchRes.ok) setBatches(await batchRes.json());
+      if (termRes.ok) setTerms(await termRes.json());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  function resetAddForm() {
+    setNewBatchId(""); setNewTermId(""); setNewDivisionId(""); setNewGroupId(""); setNewSpreadsheetId("");
+  }
+
+  async function handleAdd() {
+    if (!newBatchId) { toast.error("Select a batch"); return; }
+    if (!newTermId) { toast.error("Select a term"); return; }
+    if (!newSpreadsheetId) { toast.error("Enter a Spreadsheet ID"); return; }
+    if (cohortType === "division" && !newDivisionId) { toast.error("Select a division"); return; }
+    if (cohortType === "group" && !newGroupId) { toast.error("Select a group"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/sheets-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          divisionId: cohortType === "division" ? newDivisionId : undefined,
+          groupId: cohortType === "group" ? newGroupId : undefined,
+          termId: newTermId,
+          spreadsheetId: newSpreadsheetId,
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); toast.error(e.error ?? "Failed"); return; }
+      toast.success("Workbook mapping added");
+      setShowAdd(false);
+      resetAddForm();
+      await load();
+    } finally { setSaving(false); }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this mapping?")) return;
+    const res = await fetch(`/api/admin/sheets-config?id=${id}`, { method: "DELETE" });
+    if (!res.ok) { const e = await res.json(); toast.error(e.error ?? "Failed"); return; }
+    toast.success("Deleted");
+    await load();
+  }
+
+  async function handleSaveEdit(id: string) {
+    const res = await fetch("/api/admin/sheets-config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, spreadsheetId: editSpreadsheetId, termId: editTermId }),
+    });
+    if (!res.ok) { const e = await res.json(); toast.error(e.error ?? "Failed"); return; }
+    toast.success("Saved");
+    setEditingId(null);
+    setEditTermId("");
+    await load();
+  }
+
+  async function handleToggleActive(cfg: SheetsConfig) {
+    await fetch("/api/admin/sheets-config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: cfg.id, isActive: !cfg.isActive }),
+    });
+    await load();
+  }
+
+  async function handleTest(id: string) {
+    setTestingId(id);
+    try {
+      const res = await fetch(`/api/admin/sheets-config/test?id=${id}`);
+      const data = await res.json();
+      if (data.ok) toast.success("Connection OK — service account can read this workbook");
+      else toast.error(`Connection failed: ${data.error}`);
+    } finally { setTestingId(null); }
+  }
+
+  async function handleForceSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/admin/sheets-sync/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeSkipped }),
+      });
+      if (!res.ok) { const e = await res.json(); toast.error(e.error ?? "Sync failed"); return; }
+      const result = await res.json();
+      toast.success(`Sync complete — ${result.synced} synced, ${result.failed} failed, ${result.skipped} skipped`);
+      await load();
+    } finally { setSyncing(false); }
+  }
+
+  const statusBadge = (count: number, label: string, colorCls: string) => (
+    <div className={`flex flex-col items-center px-4 py-3 rounded-lg border ${colorCls}`}>
+      <span className="text-2xl font-bold">{count}</span>
+      <span className="text-xs font-medium mt-0.5">{label}</span>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Spinner size={36} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ── Section A: Sync Status ── */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3 text-[var(--color-text-primary)]">Sync Status</h2>
+        {syncStatus ? (
+          <div className="space-y-4">
+            <div className="flex gap-3 flex-wrap">
+              {statusBadge(syncStatus.pending, "Pending", "border-yellow-300 text-yellow-700 bg-yellow-50")}
+              {statusBadge(syncStatus.failed, "Failed", "border-red-300 text-red-700 bg-red-50")}
+              {statusBadge(syncStatus.synced, "Synced", "border-green-300 text-green-700 bg-green-50")}
+              {statusBadge(syncStatus.skipped, "Skipped", "border-gray-300 text-gray-600 bg-gray-50")}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={handleForceSync}
+                disabled={syncing}
+                className="bg-[#531f75] hover:bg-[#6b2a97] text-white"
+              >
+                {syncing ? "Syncing…" : "Force Sync All"}
+              </Button>
+              <label className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeSkipped}
+                  onChange={(e) => setIncludeSkipped(e.target.checked)}
+                  className="rounded"
+                />
+                Include skipped records
+              </label>
+            </div>
+            {syncStatus.recentFailures.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-red-600 mb-2 flex items-center gap-1">
+                  <ExclamationTriangleIcon className="w-4 h-4" />
+                  Recent Failures
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="text-xs w-full border-collapse">
+                    <thead>
+                      <tr className="bg-[var(--color-bg-secondary)]">
+                        <th className="text-left p-2 border border-[var(--color-border)]">Roll No.</th>
+                        <th className="text-left p-2 border border-[var(--color-border)]">Course</th>
+                        <th className="text-left p-2 border border-[var(--color-border)]">Session Date</th>
+                        <th className="text-left p-2 border border-[var(--color-border)]">Error</th>
+                        <th className="text-left p-2 border border-[var(--color-border)]">Attempts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {syncStatus.recentFailures.map((f) => (
+                        <tr key={f.attendanceId} className="hover:bg-[var(--color-bg-secondary)]">
+                          <td className="p-2 border border-[var(--color-border)]">{f.studentRollNumber}</td>
+                          <td className="p-2 border border-[var(--color-border)]">{f.courseName}</td>
+                          <td className="p-2 border border-[var(--color-border)]">{f.sessionDate}</td>
+                          <td className="p-2 border border-[var(--color-border)] text-red-600 max-w-xs truncate" title={f.error}>{f.error}</td>
+                          <td className="p-2 border border-[var(--color-border)] text-center">{f.attempts}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+        )}
+      </div>
+
+      {/* ── Section B: Workbook Mappings ── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Workbook Mappings</h2>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+              One Google Sheets workbook per division or group. All courses for that cohort live as tabs in the same workbook.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setShowAdd(!showAdd)}
+            className="bg-[#531f75] hover:bg-[#6b2a97] text-white flex items-center gap-1"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Add Mapping
+          </Button>
+        </div>
+
+        {showAdd && (
+          <Card className="mb-4 border border-[var(--color-border)]">
+            <CardContent className="p-4 space-y-3">
+              {/* Row 1: Batch + Term */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Batch</label>
+                  <Select value={newBatchId} onValueChange={(v) => { setNewBatchId(v); setNewTermId(""); setNewDivisionId(""); setNewGroupId(""); }}>
+                    <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
+                    <SelectContent>
+                      {batches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Term</label>
+                  <Select value={newTermId} onValueChange={setNewTermId} disabled={!newBatchId}>
+                    <SelectTrigger><SelectValue placeholder={newBatchId ? "Select term" : "Select batch first"} /></SelectTrigger>
+                    <SelectContent>
+                      {terms.filter((t) => t.batchId === newBatchId).map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Row 2: Cohort type + Division/Group + Spreadsheet ID */}
+              <div className="flex gap-4 items-center">
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer shrink-0">
+                  <input type="radio" checked={cohortType === "division"} onChange={() => { setCohortType("division"); setNewGroupId(""); }} />
+                  Division
+                </label>
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer shrink-0">
+                  <input type="radio" checked={cohortType === "group"} onChange={() => { setCohortType("group"); setNewDivisionId(""); }} />
+                  Group
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {cohortType === "division" ? (
+                  <div>
+                    <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Division</label>
+                    <Select value={newDivisionId} onValueChange={setNewDivisionId} disabled={!newBatchId}>
+                      <SelectTrigger><SelectValue placeholder={newBatchId ? "Select division" : "Select batch first"} /></SelectTrigger>
+                      <SelectContent>
+                        {divisions.filter((d) => !newBatchId || d.batchId === newBatchId).map((d) => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Group</label>
+                    <Select value={newGroupId} onValueChange={setNewGroupId} disabled={!newBatchId}>
+                      <SelectTrigger><SelectValue placeholder={newBatchId ? "Select group" : "Select batch first"} /></SelectTrigger>
+                      <SelectContent>
+                        {groups.filter((g) => !newBatchId || (g.allowedBatchIds ?? [g.batchId]).includes(newBatchId)).map((g) => (
+                          <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div>
+                  <label className="text-xs text-[var(--color-text-muted)] mb-1 block">
+                    Spreadsheet ID <span className="text-[10px] text-gray-400">(from URL: /d/[ID]/edit)</span>
+                  </label>
+                  <Input
+                    value={newSpreadsheetId}
+                    onChange={(e) => setNewSpreadsheetId(e.target.value)}
+                    placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleAdd} disabled={saving} size="sm" className="bg-[#531f75] hover:bg-[#6b2a97] text-white">
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => { setShowAdd(false); resetAddForm(); }}>Cancel</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="text-sm w-full border-collapse">
+            <thead>
+              <tr className="bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)]">
+                <th className="text-left p-2 border border-[var(--color-border)]">Division / Group</th>
+                <th className="text-left p-2 border border-[var(--color-border)]">Spreadsheet ID</th>
+                <th className="text-left p-2 border border-[var(--color-border)]">Term</th>
+                <th className="text-center p-2 border border-[var(--color-border)]">Active</th>
+                <th className="text-center p-2 border border-[var(--color-border)]">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {configs.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-4 text-center text-[var(--color-text-muted)]">
+                    No mappings yet. Add one above.
+                  </td>
+                </tr>
+              )}
+              {configs.map((cfg) => {
+                // Derive batch(es) for this config
+                const cfgDivision = cfg.divisionId ? divisions.find(d => d.id === cfg.divisionId) : null;
+                const cfgGroup    = cfg.groupId    ? groups.find(g => g.id === cfg.groupId)       : null;
+
+                // For divisions: single batch. For groups: all allowed batches.
+                const cfgBatchId  = cfgDivision?.batchId ?? cfgGroup?.batchId ?? "";
+                const cfgBatch    = batches.find(b => b.id === cfgBatchId);
+                const cfgGroupAllowedBatchIds = cfgGroup
+                  ? (cfgGroup.allowedBatchIds?.length ? cfgGroup.allowedBatchIds : [cfgGroup.batchId])
+                  : null;
+                const cfgGroupBatches = cfgGroupAllowedBatchIds
+                  ? cfgGroupAllowedBatchIds.map(id => batches.find(b => b.id === id)).filter(Boolean)
+                  : null;
+
+                // For edit term dropdown: terms from the primary batch
+                const cfgTermsForBatch = terms.filter(t => t.batchId === cfgBatchId);
+
+                return (
+                  <React.Fragment key={cfg.id}>
+                    <tr className="hover:bg-[var(--color-bg-secondary)]">
+                      <td className="p-2 border border-[var(--color-border)]">
+                        <div className="font-medium text-sm">
+                          {cfg.division?.name ?? cfg.group?.name ?? "—"}
+                          <span className="ml-1 text-[10px] text-[var(--color-text-muted)]">
+                            {cfg.division ? "(div)" : "(group)"}
+                          </span>
+                        </div>
+                        {cfg.division && cfgBatch && (
+                          <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{cfgBatch.name}</div>
+                        )}
+                        {cfg.group && cfgGroup && (
+                          <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5 space-y-0.5">
+                            {cfgGroup.specialisation?.name && (
+                              <span className="inline-block bg-[#531f75]/15 text-[#531f75] px-1.5 py-px rounded text-[9px] font-medium mr-1">
+                                {cfgGroup.specialisation.name}
+                              </span>
+                            )}
+                            {cfgGroupBatches?.map(b => b?.name).join(", ")}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-2 border border-[var(--color-border)] text-xs">
+                        <span className="truncate block max-w-[240px]" title={cfg.spreadsheetId}>{cfg.spreadsheetId}</span>
+                      </td>
+                      <td className="p-2 border border-[var(--color-border)] text-xs text-[var(--color-text-secondary)]">
+                        {cfg.term.name}
+                      </td>
+                      <td className="p-2 border border-[var(--color-border)] text-center">
+                        <button onClick={() => handleToggleActive(cfg)} title={cfg.isActive ? "Active — click to deactivate" : "Inactive — click to activate"}>
+                          {cfg.isActive
+                            ? <CheckCircleIcon className="w-5 h-5 text-green-500 mx-auto" />
+                            : <XCircleIcon className="w-5 h-5 text-gray-400 mx-auto" />}
+                        </button>
+                      </td>
+                      <td className="p-2 border border-[var(--color-border)]">
+                        <div className="flex gap-1 justify-center">
+                          <Button
+                            size="sm" variant="outline" className="h-7 text-xs"
+                            onClick={() => {
+                              if (editingId === cfg.id) { setEditingId(null); setEditTermId(""); return; }
+                              setEditingId(cfg.id);
+                              setEditSpreadsheetId(cfg.spreadsheetId);
+                              setEditTermId(cfg.termId);
+                            }}
+                            title="Edit"
+                          >
+                            <PencilSquareIcon className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            size="sm" variant="outline" className="h-7 text-xs"
+                            disabled={testingId === cfg.id}
+                            onClick={() => handleTest(cfg.id)}
+                            title="Test connection"
+                          >
+                            {testingId === cfg.id
+                              ? <ClockIcon className="w-3.5 h-3.5 animate-spin" />
+                              : <CheckCircleIcon className="w-3.5 h-3.5 text-blue-500" />}
+                          </Button>
+                          <Button
+                            size="sm" variant="outline" className="h-7 text-xs text-red-500 hover:text-red-700"
+                            onClick={() => handleDelete(cfg.id)}
+                            title="Delete"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                    {editingId === cfg.id && (
+                      <tr>
+                        <td colSpan={5} className="p-0 border border-[var(--color-border)]">
+                          <div className="p-3 bg-[var(--color-bg-secondary)] space-y-3">
+                            <div className="grid grid-cols-3 gap-3">
+                              {/* Batch — read-only, derived from division/group */}
+                              <div>
+                                <label className="text-xs text-[var(--color-text-muted)] mb-1 block">
+                                  {cfgGroupBatches && cfgGroupBatches.length > 1 ? "Batches (group spans multiple)" : "Batch"}
+                                </label>
+                                <Input
+                                  value={cfgGroupBatches
+                                    ? cfgGroupBatches.map(b => b?.name).filter(Boolean).join(", ")
+                                    : (cfgBatch?.name ?? "—")}
+                                  disabled
+                                  className="h-8 text-xs bg-[var(--color-bg-card)]"
+                                />
+                              </div>
+                              {/* Term — editable */}
+                              <div>
+                                <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Term</label>
+                                <Select value={editTermId} onValueChange={setEditTermId}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select term" /></SelectTrigger>
+                                  <SelectContent>
+                                    {cfgTermsForBatch.map(t => (
+                                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              {/* Spreadsheet ID — editable */}
+                              <div>
+                                <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Spreadsheet ID</label>
+                                <Input
+                                  value={editSpreadsheetId}
+                                  onChange={e => setEditSpreadsheetId(e.target.value)}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="sm" className="h-7 text-xs bg-[#531f75] text-white" onClick={() => handleSaveEdit(cfg.id)}>Save</Button>
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditingId(null); setEditTermId(""); }}>Cancel</Button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+          <strong>Setup:</strong> Share each workbook with the service account email
+          (from <code>GOOGLE_SERVICE_ACCOUNT_JSON</code>) as <strong>Editor</strong>.
+          Set <code>GOOGLE_SHEETS_SYNC_ENABLED=true</code> to activate sync.
+        </p>
+      </div>
+
+      {/* ── Section C: Course Tab Names ── */}
+      <div>
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Course Tab Names</h2>
+          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+            Each course must have a tab name matching the sheet tab in the workbook (e.g., &ldquo;HRM&rdquo;, &ldquo;MM-1&rdquo;).
+            This is configured once per course in the <strong>Courses</strong> tab.
+            Courses without a tab name will be skipped during sync.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="text-xs w-full border-collapse">
+            <thead>
+              <tr className="bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)]">
+                <th className="text-left p-2 border border-[var(--color-border)] font-medium">Course Code</th>
+                <th className="text-left p-2 border border-[var(--color-border)] font-medium">Course Name</th>
+                <th className="text-left p-2 border border-[var(--color-border)] font-medium">Sheet Tab Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courses.map((c) => {
+                const tabName = c.sheetsTabName;
+                return (
+                  <tr key={c.id} className="hover:bg-[var(--color-bg-secondary)]">
+                    <td className="p-2 border border-[var(--color-border)] text-[var(--color-text-primary)]">{c.code}</td>
+                    <td className="p-2 border border-[var(--color-border)] text-[var(--color-text-primary)]">{c.name}</td>
+                    <td className="p-2 border border-[var(--color-border)]">
+                      {tabName ? (
+                        <span className="text-xs text-green-500">{tabName}</span>
+                      ) : (
+                        <span className="text-xs text-[var(--color-text-muted)] italic">not set — go to Courses tab to configure</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

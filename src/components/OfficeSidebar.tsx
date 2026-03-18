@@ -6,7 +6,6 @@ import {
   ChartBarSquareIcon,
   Cog6ToothIcon,
   ClipboardDocumentCheckIcon,
-  BookOpenIcon,
   ArrowLeftStartOnRectangleIcon,
   CalendarDaysIcon,
 } from "@heroicons/react/24/outline";
@@ -43,12 +42,7 @@ export default function OfficeSidebar({ userName, open, onClose }: Props) {
       >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-2 mb-8">
-        <div
-          className="flex items-center justify-center shrink-0 w-9 h-9 rounded-xl"
-          style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
-        >
-          <BookOpenIcon className="w-5 h-5 text-white" />
-        </div>
+        <img src="/app-icon.svg" alt="Classroom Companion" className="shrink-0 w-10 h-10" />
         <h2 className="text-sm font-bold text-[var(--color-text-primary)] leading-tight">
           Classroom<br />
           <span className="font-normal text-[var(--color-text-muted)]">Companion</span>
@@ -87,7 +81,7 @@ export default function OfficeSidebar({ userName, open, onClose }: Props) {
       <div className="flex items-center gap-2.5 pt-4 border-t border-[var(--color-border)]">
         <div
           className="flex items-center justify-center text-sm font-bold text-white shrink-0 w-9 h-9 rounded-full"
-          style={{ background: "linear-gradient(135deg, #531f75, #8b5cf6)" }}
+          style={{ background: "#531f75" }}
         >
           {userName[0]}
         </div>
