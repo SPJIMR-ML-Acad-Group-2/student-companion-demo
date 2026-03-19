@@ -3,6 +3,14 @@
 import React, { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
+import {
+  CalendarDaysIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  ShieldCheckIcon,
+  ExclamationTriangleIcon,
+} from "@heroicons/react/24/outline";
 
 const FIXED_SLOTS = [
   { slot: 1, label: "8:15–9:00"   }, { slot: 2, label: "9:00–10:10"  },
@@ -22,10 +30,23 @@ interface CalendarSlot {
 interface CalendarDay { date: string; dayOfWeek: number; dayName: string; slots: CalendarSlot[]; }
 interface CalendarData { weekOf: string; weekEnd: string; weekDates: string[]; calendar: CalendarDay[]; divisions: Array<{ id: number; name: string }>; }
 
+function StatusBadge({ att, entry }: { att: { status: string } | undefined; entry: CalendarSlot }) {
+  const cls = "w-2.5 h-2.5 inline-block mr-0.5 align-text-bottom shrink-0";
+  if (!att) {
+    if (!entry.hasSession) return null;
+    if (entry.noSwipes) return <><ExclamationTriangleIcon className={cls} />No Swipes</>;
+    return <>—</>;
+  }
+  if (att.status === "P")  return <><CheckCircleIcon  className={cls} />Present</>;
+  if (att.status === "AB") return <><XCircleIcon       className={cls} />Absent</>;
+  if (att.status === "P#") return <><ShieldCheckIcon   className={cls} />Sanctioned</>;
+  return <><ClockIcon className={cls} />Late</>;
+}
+
 export default function StudentCalendar() {
-  const [data, setData]           = useState<CalendarData | null>(null);
+  const [data, setData]             = useState<CalendarData | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading]       = useState(true);
 
   const fetchCalendar = async (offset: number) => {
     const ref = new Date();
@@ -52,7 +73,10 @@ export default function StudentCalendar() {
     <div className="relative z-[1]">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-1 text-[var(--color-text-primary)]">📅 My Schedule</h1>
+        <h1 className="text-3xl font-bold mb-1 text-[var(--color-text-primary)] flex items-center gap-2">
+          <CalendarDaysIcon className="w-8 h-8 shrink-0" />
+          My Schedule
+        </h1>
         <p className="text-sm text-[var(--color-text-secondary)]">Weekly timetable with your attendance status</p>
       </div>
 
@@ -99,11 +123,6 @@ export default function StudentCalendar() {
                 att.status === "P"  ? "text-[var(--color-success)]" :
                 att.status === "AB" ? "text-[var(--color-danger)]" :
                 att.status === "P#" ? "text-[#3b82f6]" : "text-[var(--color-warning)]";
-              const statusLabel =
-                !att          ? (entry.hasSession ? (entry.noSwipes ? "⚠ No Swipes" : "—") : "") :
-                att.status === "P"  ? "✓ Present" :
-                att.status === "AB" ? "✗ Absent"  :
-                att.status === "P#" ? "🛡 Sanctioned Leave"  : `⏱ ${att.status}`;
               const bgColor =
                 att?.status === "P"  ? "rgba(34,197,94,0.07)"  :
                 att?.status === "AB" ? "rgba(239,68,68,0.07)"  :
@@ -124,7 +143,9 @@ export default function StudentCalendar() {
                   {entry.facultyName && <div className="text-[var(--color-accent-sec)] mt-0.5" style={{ fontSize: 10 }}>{entry.facultyName}</div>}
                   {entry.roomName && <div className="text-[var(--color-text-muted)] mt-px" style={{ fontSize: 10 }}>{entry.roomName}</div>}
                   {entry.hasSession && (
-                    <div className={`font-semibold mt-1 ${statusColor}`} style={{ fontSize: 10 }}>{statusLabel}</div>
+                    <div className={`flex items-center font-semibold mt-1 ${statusColor}`} style={{ fontSize: 10 }}>
+                      <StatusBadge att={att} entry={entry} />
+                    </div>
                   )}
                 </div>
               );
@@ -135,12 +156,24 @@ export default function StudentCalendar() {
 
       {/* Legend */}
       <div className="flex gap-4 mt-5 text-xs flex-wrap text-[var(--color-text-muted)]">
-        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle bg-[var(--color-accent)]" /> Core</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm mr-1 align-middle bg-[var(--color-warning)]" /> Specialisation</span>
-        <span className="text-[var(--color-success)]">✓ Present</span>
-        <span className="text-[var(--color-danger)]">✗ Absent</span>
-        <span className="text-[var(--color-warning)]">⏱ Late</span>
-        <span className="text-[#3b82f6]">🛡 Sanctioned Leave</span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm align-middle bg-[var(--color-accent)]" /> Core
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm align-middle bg-[var(--color-warning)]" /> Specialisation
+        </span>
+        <span className="flex items-center gap-1 text-[var(--color-success)]">
+          <CheckCircleIcon className="w-3 h-3" /> Present
+        </span>
+        <span className="flex items-center gap-1 text-[var(--color-danger)]">
+          <XCircleIcon className="w-3 h-3" /> Absent
+        </span>
+        <span className="flex items-center gap-1 text-[var(--color-warning)]">
+          <ClockIcon className="w-3 h-3" /> Late
+        </span>
+        <span className="flex items-center gap-1 text-[#3b82f6]">
+          <ShieldCheckIcon className="w-3 h-3" /> Sanctioned Leave
+        </span>
       </div>
     </div>
   );

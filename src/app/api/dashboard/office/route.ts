@@ -150,7 +150,11 @@ async function buildDivisionSummaries(
         where: { divisionId: div.id },
       });
       const timetableSlots = await prisma.timetable.findMany({
-        where: { divisionId: div.id, isConducted: true },
+        where: {
+          divisionId: div.id,
+          isConducted: true,
+          ...(activeTermId ? { termId: activeTermId } : {}),
+        },
         include: { course: true },
       });
 
@@ -255,7 +259,11 @@ async function buildGroupSummaries(
         where: { id: { in: studentIds } },
       });
       const timetableSlots = await prisma.timetable.findMany({
-        where: { groupId: grp.id, isConducted: true },
+        where: {
+          groupId: grp.id,
+          isConducted: true,
+          ...(activeTermId ? { termId: activeTermId } : {}),
+        },
         include: { course: true },
       });
 
