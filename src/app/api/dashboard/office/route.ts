@@ -14,7 +14,11 @@ export async function GET(req: NextRequest) {
     if (user.role !== "programme_office")
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const termId = req.nextUrl.searchParams.get("termId") || null;
+    const termId     = req.nextUrl.searchParams.get("termId")     || null;
+    const batchId    = req.nextUrl.searchParams.get("batchId")    || null;
+    const divisionId = req.nextUrl.searchParams.get("divisionId") || null;
+    const groupId    = req.nextUrl.searchParams.get("groupId")    || null;
+    const courseId   = req.nextUrl.searchParams.get("courseId")   || null;
 
     const programmes = await prisma.programme.findMany({
       include: {
@@ -84,24 +88,53 @@ export async function GET(req: NextRequest) {
       for (const grp of spec.groups) groupStudentMap.set(grp.groupId, grp.studentCount);
     }
 
-    // Attendance trend: conducted sessions grouped by date, filtered by term date range if termId given
+    // ── Attendance trend ────────────────────────────────────────────────────
+    // Resolve date range: explicit termId → that term's dates;
+    // "Active term" (no termId) → active term dates from the relevant batches.
+    const toDateStr = (val: unknown): string | undefined => {
+      if (!val) return undefined;
+      if (val instanceof Date) return val.toISOString().slice(0, 10);
+      return String(val).slice(0, 10);
+    };
+
     let trendStartDate: string | undefined;
     let trendEndDate: string | undefined;
+
     if (termId) {
       const term = await prisma.term.findUnique({
         where: { id: termId },
         select: { startDate: true, endDate: true },
       });
-      trendStartDate = term?.startDate ?? undefined;
-      trendEndDate = term?.endDate ?? undefined;
+      trendStartDate = toDateStr(term?.startDate);
+      trendEndDate   = toDateStr(term?.endDate);
+    } else {
+      // Use active term date range from relevant batches
+      const activeBatches = await prisma.batch.findMany({
+        where: batchId ? { id: batchId } : {},
+        include: { activeTerm: { select: { startDate: true, endDate: true } } },
+      });
+      const starts = activeBatches.map((b) => toDateStr(b.activeTerm?.startDate)).filter((s): s is string => !!s);
+      const ends   = activeBatches.map((b) => toDateStr(b.activeTerm?.endDate)).filter((s): s is string => !!s);
+      if (starts.length) trendStartDate = starts.sort()[0];          // earliest start
+      if (ends.length)   trendEndDate   = ends.sort().at(-1);        // latest end
     }
+
+    // Build the where clause — apply date range + most-specific cohort filter available
     // Count only present-ish statuses (P = present, LT = late) so the trend
     // reflects real attendance and not merely "a row exists for that student".
     const trendSessions = await prisma.timetable.findMany({
       where: {
         isConducted: true,
-        ...(trendStartDate ? { date: { gte: trendStartDate } } : {}),
-        ...(trendEndDate ? { date: { lte: trendEndDate } } : {}),
+        ...(trendStartDate || trendEndDate
+          ? { date: { ...(trendStartDate ? { gte: trendStartDate } : {}), ...(trendEndDate ? { lte: trendEndDate } : {}) } }
+          : {}),
+        // Cohort scoping: divisionId > groupId > batchId (most → least specific)
+        ...(divisionId ? { divisionId } : {}),
+        ...(groupId    ? { groupId }    : {}),
+        ...(!divisionId && !groupId && batchId
+          ? { OR: [{ division: { batchId } }, { group: { batchId } }] }
+          : {}),
+        ...(courseId ? { courseId } : {}),
       },
       select: {
         date: true,

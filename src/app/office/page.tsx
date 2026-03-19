@@ -119,11 +119,18 @@ export default function OfficeDashboard() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [availableTerms, setAvailableTerms] = useState<Term[]>([]);
 
-  // Fetch dashboard (re-runs when termId changes)
+  // Fetch dashboard — re-runs whenever any filter changes
   useEffect(() => {
     setLoading(true);
-    const params = selectedTermId ? `?termId=${selectedTermId}` : "";
-    fetch(`/api/dashboard/office${params}`)
+    const divF = selectedDivOrGroup.startsWith("div_") ? selectedDivOrGroup.slice(4) : "";
+    const grpF = selectedDivOrGroup.startsWith("grp_") ? selectedDivOrGroup.slice(4) : "";
+    const params = new URLSearchParams();
+    if (selectedTermId)   params.set("termId",    selectedTermId);
+    if (selectedBatchId)  params.set("batchId",   selectedBatchId);
+    if (divF)             params.set("divisionId", divF);
+    if (grpF)             params.set("groupId",    grpF);
+    if (selectedCourseId) params.set("courseId",   selectedCourseId);
+    fetch(`/api/dashboard/office?${params}`)
       .then((r) => r.json())
       .then((data) => {
         setProgrammes(data.programmes || []);
@@ -131,7 +138,7 @@ export default function OfficeDashboard() {
         setAttendanceTrend(data.attendanceTrend || []);
       })
       .finally(() => setLoading(false));
-  }, [selectedTermId]);
+  }, [selectedTermId, selectedBatchId, selectedDivOrGroup, selectedCourseId]);
 
   // Fetch terms when batch changes
   useEffect(() => {
