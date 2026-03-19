@@ -244,7 +244,6 @@ async function main() {
   for (let i = 0; i < attendanceRows.length; i += CHUNK) {
     const r = await prisma.attendance.createMany({
       data: attendanceRows.slice(i, i + CHUNK),
-      skipDuplicates: true,
     });
     aCreated += r.count;
     process.stdout.write(
@@ -259,7 +258,6 @@ async function main() {
   for (let i = 0; i < syncRows.length; i += CHUNK) {
     const r = await prisma.attendanceSyncLog.createMany({
       data: syncRows.slice(i, i + CHUNK),
-      skipDuplicates: true,
     });
     sCreated += r.count;
     process.stdout.write(

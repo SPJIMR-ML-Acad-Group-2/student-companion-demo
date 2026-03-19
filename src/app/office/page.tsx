@@ -242,7 +242,9 @@ export default function OfficeDashboard() {
       : selectedGrpData2.totalSessions
     : selectedCourseId
     ? filtered.flatMap((p) => p.divisions).flatMap((d) => d.courses).filter((c) => c.courseId === selectedCourseId).reduce((s, c) => s + c.totalSessions, 0)
-    : filtered.reduce((s, p) => s + p.divisions.reduce((ds, d) => ds + d.totalSessions, 0), 0);
+      + filteredSpecs.flatMap((s) => s.groups).flatMap((g) => g.courses).filter((c) => c.courseId === selectedCourseId).reduce((s, c) => s + c.totalSessions, 0)
+    : filtered.reduce((s, p) => s + p.divisions.reduce((ds, d) => ds + d.totalSessions, 0), 0)
+      + filteredSpecs.reduce((s, spec) => s + spec.groups.reduce((gs, g) => gs + g.totalSessions, 0), 0);
 
   // Build enriched alert list (respects all filters)
   const allAlerts: AlertItem[] = [

@@ -126,10 +126,17 @@ async function main() {
     });
 
     // ── 5. Schedule per division ───────────────────────────────────────────────
+    // Determine whether CourseDivision records exist for this term's courses.
+    // If none exist, fall back to assigning every course in the term to every
+    // division in the batch (the most common setup when divisions aren't set).
+    const hasCDRecords = courseTerms.some((ct) => ct.course.courseDivisions.length > 0);
+
     for (const division of term.batch.divisions) {
       const courses = courseTerms
         .filter((ct) =>
-          ct.course.courseDivisions.some((cd) => cd.divisionId === division.id)
+          hasCDRecords
+            ? ct.course.courseDivisions.some((cd) => cd.divisionId === division.id)
+            : true // fallback: all courses in term → all divisions
         )
         .map((ct) => ct.course)
         .sort((a, b) => a.code.localeCompare(b.code)); // stable order
@@ -228,7 +235,6 @@ async function main() {
     const chunk = allEntries.slice(i, i + CHUNK);
     const result = await prisma.timetable.createMany({
       data: chunk,
-      skipDuplicates: true,
     });
     created += result.count;
     process.stdout.write(
