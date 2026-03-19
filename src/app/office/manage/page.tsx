@@ -2275,7 +2275,7 @@ function CoursesTab() {
           />
         </div>
         <div className="min-w-0">
-          <FieldLabel text="Sessions (auto)" />
+          <FieldLabel text="Sessions" />
           <Input
             type="number"
             value={form.totalSessions}

@@ -244,15 +244,16 @@ export async function PATCH(req: NextRequest) {
   if (!existingCourse)
     return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
-  // Recalculate totalSessions if credits changed
-  if (data.credits) {
+  // Auto-calculate totalSessions from credits only when totalSessions was NOT
+  // explicitly provided in the request body — otherwise trust the client value.
+  if (data.credits && !("totalSessions" in body)) {
     const creditSessionMap: Record<number, number> = {
       1: 9,
       2: 18,
       3: 26,
       4: 35,
     };
-    data.totalSessions = creditSessionMap[data.credits] || data.totalSessions;
+    data.totalSessions = creditSessionMap[data.credits] ?? 26;
   }
 
   // Handle wiping and creating new mappings if provided

@@ -119,11 +119,18 @@ export default function OfficeDashboard() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [availableTerms, setAvailableTerms] = useState<Term[]>([]);
 
-  // Fetch dashboard (re-runs when termId changes)
+  // Fetch dashboard — re-runs whenever any filter changes
   useEffect(() => {
     setLoading(true);
-    const params = selectedTermId ? `?termId=${selectedTermId}` : "";
-    fetch(`/api/dashboard/office${params}`)
+    const divF = selectedDivOrGroup.startsWith("div_") ? selectedDivOrGroup.slice(4) : "";
+    const grpF = selectedDivOrGroup.startsWith("grp_") ? selectedDivOrGroup.slice(4) : "";
+    const params = new URLSearchParams();
+    if (selectedTermId)   params.set("termId",    selectedTermId);
+    if (selectedBatchId)  params.set("batchId",   selectedBatchId);
+    if (divF)             params.set("divisionId", divF);
+    if (grpF)             params.set("groupId",    grpF);
+    if (selectedCourseId) params.set("courseId",   selectedCourseId);
+    fetch(`/api/dashboard/office?${params}`)
       .then((r) => r.json())
       .then((data) => {
         setProgrammes(data.programmes || []);
@@ -131,7 +138,7 @@ export default function OfficeDashboard() {
         setAttendanceTrend(data.attendanceTrend || []);
       })
       .finally(() => setLoading(false));
-  }, [selectedTermId]);
+  }, [selectedTermId, selectedBatchId, selectedDivOrGroup, selectedCourseId]);
 
   // Fetch terms when batch changes
   useEffect(() => {
@@ -235,7 +242,9 @@ export default function OfficeDashboard() {
       : selectedGrpData2.totalSessions
     : selectedCourseId
     ? filtered.flatMap((p) => p.divisions).flatMap((d) => d.courses).filter((c) => c.courseId === selectedCourseId).reduce((s, c) => s + c.totalSessions, 0)
-    : filtered.reduce((s, p) => s + p.divisions.reduce((ds, d) => ds + d.totalSessions, 0), 0);
+      + filteredSpecs.flatMap((s) => s.groups).flatMap((g) => g.courses).filter((c) => c.courseId === selectedCourseId).reduce((s, c) => s + c.totalSessions, 0)
+    : filtered.reduce((s, p) => s + p.divisions.reduce((ds, d) => ds + d.totalSessions, 0), 0)
+      + filteredSpecs.reduce((s, spec) => s + spec.groups.reduce((gs, g) => gs + g.totalSessions, 0), 0);
 
   // Build enriched alert list (respects all filters)
   const allAlerts: AlertItem[] = [

@@ -155,11 +155,22 @@ async function main() {
 
   // ─── Terms (linked to Batch, not Programme) ──────────
   console.log("📅 Creating terms...");
+  const TERM_DATES = [
+    { startDate: "2025-06-23", endDate: "2025-09-12" },
+    { startDate: "2025-09-15", endDate: "2025-12-31" },
+    { startDate: "2026-01-01", endDate: "2026-03-31" },
+  ];
   const pgdmTerms = [];
   for (let t = 1; t <= 3; t++) {
     pgdmTerms.push(
       await prisma.term.create({
-        data: { batchId: pgdm2527.id, number: t, name: `Term ${t}` },
+        data: {
+          batchId: pgdm2527.id,
+          number: t,
+          name: `Term ${t}`,
+          startDate: TERM_DATES[t - 1].startDate,
+          endDate: TERM_DATES[t - 1].endDate,
+        },
       }),
     );
   }
@@ -167,7 +178,13 @@ async function main() {
   for (let t = 1; t <= 3; t++) {
     bmTerms.push(
       await prisma.term.create({
-        data: { batchId: pgdmBm2527.id, number: t, name: `Term ${t}` },
+        data: {
+          batchId: pgdmBm2527.id,
+          number: t,
+          name: `Term ${t}`,
+          startDate: TERM_DATES[t - 1].startDate,
+          endDate: TERM_DATES[t - 1].endDate,
+        },
       }),
     );
   }
@@ -188,15 +205,27 @@ async function main() {
   // ─── Rooms ─────────────────────────────────────────
   console.log("🏠 Creating rooms...");
   const roomNames = [
-    "LT-1",
-    "LT-2",
-    "LT-3",
-    "Room 101",
-    "Room 102",
-    "Room 103",
-    "Amphitheatre",
-    "Lab 1",
-    "Lab 2",
+    "NCR1",
+    "NCR2",
+    "NCR4",
+    "NCR5",
+    "NCR6",
+    "NCR7",
+    "NCR8",
+    "NCR9",
+    "NCR10",
+    "Dome 1",
+    "Dome 2",
+    "Dome 3",
+    "D2-04",
+    "D3-04",
+    "D4-04",
+    "Gyan Auditorium",
+    "ML Shrikant Auditorium",
+    "C1-08 Group Works Room",
+    "C5-08 Simulation Lab",
+    "C2-08",
+    "C2-11",
   ];
   const roomMap = {};
   for (const name of roomNames) {
@@ -223,21 +252,21 @@ async function main() {
   console.log("🏷️  Creating divisions...");
   // PGDM 2025-27: A, B, C (10 each = 30 total)
   const divA = await prisma.division.create({
-    data: { name: "A", batchId: pgdm2527.id, defaultRoomId: roomMap["LT-1"].id },
+    data: { name: "A", batchId: pgdm2527.id, defaultRoomId: roomMap["NCR1"].id },
   });
   const divB = await prisma.division.create({
-    data: { name: "B", batchId: pgdm2527.id, defaultRoomId: roomMap["LT-2"].id },
+    data: { name: "B", batchId: pgdm2527.id, defaultRoomId: roomMap["NCR2"].id },
   });
   const divC = await prisma.division.create({
-    data: { name: "C", batchId: pgdm2527.id, defaultRoomId: roomMap["LT-3"].id },
+    data: { name: "C", batchId: pgdm2527.id, defaultRoomId: roomMap["NCR4"].id },
   });
 
   // PGDM(BM) 2025-27: D, E (10 each = 20 total)
   const divD = await prisma.division.create({
-    data: { name: "D", batchId: pgdmBm2527.id, defaultRoomId: roomMap["Room 101"].id },
+    data: { name: "D", batchId: pgdmBm2527.id, defaultRoomId: roomMap["NCR5"].id },
   });
   const divE = await prisma.division.create({
-    data: { name: "E", batchId: pgdmBm2527.id, defaultRoomId: roomMap["Room 102"].id },
+    data: { name: "E", batchId: pgdmBm2527.id, defaultRoomId: roomMap["NCR6"].id },
   });
 
   // ─── Specialisation Groups (replace spec divisions) ───
@@ -485,40 +514,48 @@ async function main() {
     data: {
       code: "OLS515-PDM-46",
       name: "Human Resource Management",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "HRM",
+      totalSessions: 9,
+      credits: 1,
       type: "core",
       courseTerms: { create: [{ termId: t3pgdm.id }] },
+      courseDivisions: { create: [{ divisionId: divA.id }, { divisionId: divB.id }, { divisionId: divC.id }] },
     },
   });
   const bps_pdm = await prisma.course.create({
     data: {
       code: "STR507-PDM-46",
       name: "Business Policy and Strategy II",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "BP&S-II",
+      totalSessions: 18,
+      credits: 2,
       type: "core",
       courseTerms: { create: [{ termId: t3pgdm.id }] },
+      courseDivisions: { create: [{ divisionId: divA.id }, { divisionId: divB.id }, { divisionId: divC.id }] },
     },
   });
   const ds_pdm = await prisma.course.create({
     data: {
       code: "QTM522-PDM-46",
       name: "Decision Science",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "DS",
+      totalSessions: 18,
+      credits: 2,
       type: "core",
       courseTerms: { create: [{ termId: t3pgdm.id }] },
+      courseDivisions: { create: [{ divisionId: divA.id }, { divisionId: divB.id }, { divisionId: divC.id }] },
     },
   });
   const ma_pdm = await prisma.course.create({
     data: {
       code: "ACC506-PDM-46",
       name: "Management Accounting",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "MA",
+      totalSessions: 18,
+      credits: 2,
       type: "core",
       courseTerms: { create: [{ termId: t3pgdm.id }] },
+      courseDivisions: { create: [{ divisionId: divA.id }, { divisionId: divB.id }, { divisionId: divC.id }] },
     },
   });
 
@@ -526,40 +563,48 @@ async function main() {
     data: {
       code: "OLS515-PBM-04",
       name: "Human Resource Management",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "HRM",
+      totalSessions: 9,
+      credits: 1,
       type: "core",
       courseTerms: { create: [{ termId: t3bm.id }] },
+      courseDivisions: { create: [{ divisionId: divD.id }, { divisionId: divE.id }] },
     },
   });
   const bps_bm = await prisma.course.create({
     data: {
       code: "STR507-PBM-04",
       name: "Business Policy and Strategy II",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "BP&S-II",
+      totalSessions: 18,
+      credits: 2,
       type: "core",
       courseTerms: { create: [{ termId: t3bm.id }] },
+      courseDivisions: { create: [{ divisionId: divD.id }, { divisionId: divE.id }] },
     },
   });
   const ds_bm = await prisma.course.create({
     data: {
       code: "QTM522-PBM-04",
       name: "Decision Science",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "DS",
+      totalSessions: 18,
+      credits: 2,
       type: "core",
       courseTerms: { create: [{ termId: t3bm.id }] },
+      courseDivisions: { create: [{ divisionId: divD.id }, { divisionId: divE.id }] },
     },
   });
   const ma_bm = await prisma.course.create({
     data: {
       code: "ACC506-PBM-04",
       name: "Management Accounting",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "MA",
+      totalSessions: 18,
+      credits: 2,
       type: "core",
       courseTerms: { create: [{ termId: t3bm.id }] },
+      courseDivisions: { create: [{ divisionId: divD.id }, { divisionId: divE.id }] },
     },
   });
 
@@ -567,8 +612,9 @@ async function main() {
     data: {
       code: "INF522-PDM-46",
       name: "Digital Product Management",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "DPM",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: im.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -578,8 +624,9 @@ async function main() {
     data: {
       code: "ANA522-PDM-46",
       name: "Business Intelligence and Analytics",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "BIA",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: im.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -589,8 +636,9 @@ async function main() {
     data: {
       code: "INF524-PDM-46",
       name: "Enterprise IT",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "EIT",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: im.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -600,8 +648,9 @@ async function main() {
     data: {
       code: "INF530-PDM-46",
       name: "Maker Lab",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "ML",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: im.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -612,8 +661,9 @@ async function main() {
     data: {
       code: "MKT501-PDM-46",
       name: "Consumer Behaviour",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "CB",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: mkt.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -623,8 +673,9 @@ async function main() {
     data: {
       code: "MKT502-PDM-46",
       name: "Marketing Research",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "MR",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: mkt.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -634,6 +685,7 @@ async function main() {
     data: {
       code: "MKT503-PDM-46",
       name: "Sales and Distribution Management",
+      sheetsTabName: "SDM",
       totalSessions: 26,
       credits: 3,
       type: "specialisation",
@@ -645,6 +697,7 @@ async function main() {
     data: {
       code: "MKT504-PDM-46",
       name: "Strategic Brand Management",
+      sheetsTabName: "SBM",
       totalSessions: 26,
       credits: 3,
       type: "specialisation",
@@ -657,8 +710,9 @@ async function main() {
     data: {
       code: "FIN501-PDM-46",
       name: "Corporate Valuation",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "CV",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: fin.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -668,8 +722,9 @@ async function main() {
     data: {
       code: "FIN502-PDM-46",
       name: "Security Analysis & Portfolio Mgmt",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "SA&PM",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: fin.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -679,8 +734,9 @@ async function main() {
     data: {
       code: "FIN503-PDM-46",
       name: "Financial Laws",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "FL",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: fin.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -690,8 +746,9 @@ async function main() {
     data: {
       code: "FIN504-PDM-46",
       name: "Financial Modelling",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "FM",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: fin.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -702,8 +759,9 @@ async function main() {
     data: {
       code: "OPS501-PDM-46",
       name: "Service Operations Management",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "SOM",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: ops.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -713,8 +771,9 @@ async function main() {
     data: {
       code: "OPS502-PDM-46",
       name: "Logistics Management",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "LM",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: ops.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -724,8 +783,9 @@ async function main() {
     data: {
       code: "OPS503-PDM-46",
       name: "Procurement and Strategic Sourcing",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "PSS",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: ops.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -735,8 +795,9 @@ async function main() {
     data: {
       code: "OPS504-PDM-46",
       name: "Supply Chain Planning & Coordination",
-      totalSessions: 26,
-      credits: 3,
+      sheetsTabName: "SCP&C",
+      totalSessions: 18,
+      credits: 2,
       type: "specialisation",
       specialisationId: ops.id,
       courseTerms: { create: [{ termId: t3pgdm.id }, { termId: t3bm.id }] },
@@ -880,15 +941,27 @@ async function main() {
   // Rooms
   const allRooms = await prisma.room.findMany({ orderBy: { name: "asc" } });
   const roomErpMap = {
-    Amphitheatre: "RES0710",
-    "Lab 1": "RES0711",
-    "Lab 2": "RES0712",
-    "LT-1": "RES0704",
-    "LT-2": "RES0705",
-    "LT-3": "RES0706",
-    "Room 101": "RES0707",
-    "Room 102": "RES0708",
-    "Room 103": "RES0709",
+    "C1-08 Group Works Room": "RES0701",
+    "C2-08": "RES0702",
+    "C2-11": "RES0703",
+    "C5-08 Simulation Lab": "RES0704",
+    "D2-04": "RES0705",
+    "D3-04": "RES0706",
+    "D4-04": "RES0707",
+    "Dome 1": "RES0708",
+    "Dome 2": "RES0709",
+    "Dome 3": "RES0710",
+    "Gyan Auditorium": "RES0711",
+    "ML Shrikant Auditorium": "RES0712",
+    NCR1: "RES0713",
+    NCR10: "RES0714",
+    NCR2: "RES0715",
+    NCR4: "RES0716",
+    NCR5: "RES0717",
+    NCR6: "RES0718",
+    NCR7: "RES0719",
+    NCR8: "RES0720",
+    NCR9: "RES0721",
   };
   for (const room of allRooms) {
     if (roomErpMap[room.name]) {
